@@ -1,0 +1,77 @@
+# ==============================================================================
+# Orquestación de Contenedores - Agente PQR Universidad de Cundinamarca
+# Descripción: Topología local para el orquestador FastAPI y base de datos PostgreSQL
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Servicio de Base de Datos Operacional
+  # ----------------------------------------------------------------------------
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: pqr_postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: udec_admin
+      POSTGRES_PASSWORD: udec_password_secure_2026
+      POSTGRES_DB: agente_pqr_db
+      TZ: America/Bogota
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistencia de los datos relacionales en el disco local
+      - pqr_pgdata:/var/lib/postgresql/data
+      # Inyección automática del esquema SQL al iniciar el contenedor por primera vez
+      - ../sql/init_schema.sql:/docker-entrypoint-initdb.d/01_init_schema.sql:ro
+    networks:
+      - pqr_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U udec_admin -d agente_pqr_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Servicio del Orquestador Backend (FastAPI)
+  # ----------------------------------------------------------------------------
+  fastapi_orquestador:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: pqr_fastapi_backend
+    restart: on-failure
+    # INYECCIÓN DNS: Resuelve la ceguera de red (DNS Failure) del hipervisor WSL2
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    # ENLACE DE CREDENCIALES: Obliga a Docker a leer las llaves reales de Dify Cloud 
+    # directamente desde tu archivo .env, evadiendo el error de hostname
+    env_file:
+      - ../../backend/.env
+    environment:
+      TZ: America/Bogota
+    # --------> INYECCIÓN HOST GATEWAY <--------
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../backend:/app
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - pqr_network
+      - dify_red_interna
+
+volumes:
+  pqr_pgdata:
+    name: pqr_postgres_data
+
+networks:
+  pqr_network:
+    name: pqr_internal_network
+    driver: bridge
+  dify_red_interna:
+    external: true
+    name: docker_default

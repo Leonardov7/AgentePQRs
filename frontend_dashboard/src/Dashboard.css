@@ -1,0 +1,172 @@
+/* ==========================================================================
+   Estilos del Dashboard de Asesores PQR - Universidad de Cundinamarca
+   ========================================================================== */
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f0f2f5;
+}
+
+.dashboard-container {
+  display: flex;
+  height: 100vh;
+}
+
+/* Panel Izquierdo: Cola de Espera */
+.sidebar {
+  width: 300px;
+  background-color: #ffffff;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  background-color: #1b5e20; /* Verde oscuro UdeC */
+  color: white;
+  padding: 20px;
+  font-size: 1.2em;
+  font-weight: bold;
+  text-align: center;
+}
+
+.sesion-item {
+  padding: 15px;
+  border-bottom: 1px solid #eeeeee;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.sesion-item:hover {
+  background-color: #f5f5f5;
+}
+
+.sesion-item.activa {
+  background-color: #e8f5e9;
+  border-left: 5px solid #2e7d32;
+}
+
+.badge-alerta {
+  background-color: #d32f2f;
+  color: white;
+  font-size: 0.75em;
+  padding: 3px 8px;
+  border-radius: 12px;
+  margin-top: 5px;
+  display: inline-block;
+}
+
+/* Panel Derecho: Área de Chat y Contexto */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #ece5dd;
+}
+
+.chat-header {
+  background-color: #ffffff;
+  padding: 15px 20px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.btn-cerrar-ticket {
+  background-color: #d32f2f;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.mensajes-container {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mensaje-burbuja {
+  max-width: 70%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.mensaje-asesor {
+  align-self: flex-end;
+  background-color: #dcf8c6;
+}
+
+.mensaje-estudiante {
+  align-self: flex-start;
+  background-color: #ffffff;
+}
+
+.mensaje-bot {
+  align-self: flex-start;
+  background-color: #e3f2fd;
+  border-left: 4px solid #1976d2;
+}
+
+.mensaje-sistema {
+  align-self: center;
+  background-color: rgba(0,0,0,0.05);
+  font-style: italic;
+  font-size: 0.85em;
+  color: #555;
+  padding: 5px 15px;
+  border-radius: 15px;
+}
+
+.similitud-tag {
+  display: block;
+  font-size: 0.75em;
+  color: #d32f2f;
+  margin-top: 5px;
+  font-weight: bold;
+}
+
+.input-container {
+  background-color: #f0f0f0;
+  padding: 15px;
+  display: flex;
+  gap: 10px;
+}
+
+.input-container input {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 24px;
+  outline: none;
+}
+
+.input-container button {
+  background-color: #2e7d32;
+  color: white;
+  border: none;
+  padding: 0 20px;
+  border-radius: 24px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.pantalla-vacia {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #888;
+  font-size: 1.2em;
+  background-color: #f0f2f5;
+}

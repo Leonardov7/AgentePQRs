@@ -1,0 +1,85 @@
+# ==============================================================================
+# ARCHIVO: .gitignore
+# Descripción: Ignora archivos pesados, compilados y credenciales sensibles.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Credenciales y Variables de Entorno (CRÍTICO)
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.pem
+
+# ------------------------------------------------------------------------------
+# 2. Python y Entornos Virtuales (FastAPI / Backend)
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ------------------------------------------------------------------------------
+# 3. Node.js y Compilados de Frontend (React / Dashboard / Widget)
+# ------------------------------------------------------------------------------
+node_modules/
+jspm_packages/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+out/
+.next/
+.nuxt/
+build/
+
+# ------------------------------------------------------------------------------
+# 4. Bases de Datos y Volúmenes de Docker (Persistencia Local)
+# ------------------------------------------------------------------------------
+postgres_data/
+datos_listos_dify/
+*.sqlite3
+*.db
+
+# ------------------------------------------------------------------------------
+# 5. Archivos de Sistema Operativo y Editores (IDE)
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

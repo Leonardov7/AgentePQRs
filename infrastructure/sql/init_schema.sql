@@ -19,15 +19,21 @@ CREATE TABLE asesores (
 );
 
 -- 2. Tabla de Sesiones (Interacciones de Estudiantes)
-CREATE TABLE sesiones (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    estudiante_id VARCHAR(100), -- Identificador temporal anónimo o matrícula del estudiante logueado
-    estado VARCHAR(50) DEFAULT 'atencion_bot', -- Valores permitidos 'atencion_bot', 'en_cola', 'atencion_humana', 'cerrada', 'ticket_asincrono'
+CREATE TABLE IF NOT EXISTS sesiones (
+    id UUID PRIMARY KEY,
+    estudiante_id VARCHAR(100),
+    nombre_usuario VARCHAR(150),
+    documento_identidad VARCHAR(50),
+    correo VARCHAR(150),
+    celular VARCHAR(50),
+    sede VARCHAR(100),
+    tipo_usuario VARCHAR(50),
+    politicas_aceptadas BOOLEAN DEFAULT FALSE,
+    estado VARCHAR(50) DEFAULT 'atencion_bot',
     asesor_asignado_id UUID REFERENCES asesores(id) ON DELETE SET NULL,
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     actualizado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-
 -- 3. Tabla de Mensajes (Historial detallado del chat)
 CREATE TABLE mensajes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

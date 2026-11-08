@@ -12,8 +12,8 @@ WORKDIR /app
 # 3. Copiar únicamente el archivo de requerimientos primero (optimiza caché de Docker)
 COPY requirements.txt .
 
-# 4. Instalar dependencias
-RUN pip install --no-cache-dir -r requirements.txt
+# 4. Instalar dependencias con tiempo de espera extendido para evitar fallos de red
+RUN pip install --no-cache-dir --default-timeout=1000 --retries=10 -r requirements.txt
 
 # Instalar los navegadores binarios de Playwright y sus dependencias de sistema operativo (Debian/Ubuntu)
 RUN playwright install chromium

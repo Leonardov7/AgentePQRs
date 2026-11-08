@@ -13,19 +13,7 @@ function AdminEstadisticas() {
   return (
     <div className="dashboard-root">
       {/* Barra Superior Institucional */}
-      <header className="top-navbar">
-        <div className="navbar-brand">
-          <span>🎓 Universidad de Cundinamarca | Consola PQR</span>
-        </div>
-        <ul className="navbar-menu">
-          <li><Link to="/">Por Responder</Link></li>
-          <li><Link to="/admin/estadisticas" className="active">Estadísticas</Link></li>
-          <li><Link to="/admin/conocimiento">Gestión de Conocimiento</Link></li>
-        </ul>
-        <div className="navbar-user">
-          Perfil: <strong>Superadministrador</strong>
-        </div>
-      </header>
+      
 
       {/* Contenedor de Reportes */}
       <div className="estadisticas-container">

@@ -1,129 +1,256 @@
 # ==============================================================================
-# Controlador de Conocimiento (Endpoints Administrativos) - Agente PQR
-# Descripción: Expone las rutas HTTP para la automatización del scraping 
-# utilizando Playwright local, emulando la interfaz asíncrona de Firecrawl.
+# Controlador de Extracción de Conocimiento (Scraping)
+# Descripción: Expone las rutas HTTP para gestionar el scraping, consultar 
+# estado, cancelar procesos y descargar bases de datos procesadas con ML.
 # ==============================================================================
 
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks
-from fastapi.responses import FileResponse
-import logging
 import os
 import uuid
 from datetime import datetime
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+import logging
 
-from app.schemas.admin import PeticionScraping, RespuestaInicioScraping, RespuestaEstadoScraping
-from app.services.scraper_local import rastrear_dominio
+from app.services.scraper_local import rastrear_dominio, generar_corpus_optimizado
 
+router = APIRouter(prefix="/conocimiento", tags=["Gestión de Conocimiento"])
 logger = logging.getLogger(__name__)
-router = APIRouter()
 
-DIRECTORIO_SALIDA = os.path.join(os.getcwd(), "datos_listos_dify")
+trabajos_activos = {}
 
-# Diccionario en memoria para rastrear el progreso de los trabajos asíncronos sin usar base de datos
-TRABAJOS_LOCALES = {}
+DIR_DESCARGAS = "datos_listos_dify"
+os.makedirs(DIR_DESCARGAS, exist_ok=True)
 
-async def tarea_scraping_segundo_plano(job_id: str, url: str, limite: int):
-    """
-    Se ejecuta en el background de FastAPI. Extrae las páginas, unifica el Markdown
-    y actualiza el diccionario global para que el dashboard vea el progreso.
-    """
+class ScrapingRequest(BaseModel):
+    url_objetivo: str
+    limite_paginas: int = 15
+
+async def ejecutar_scraping_segundo_plano(job_id: str, url: str, limite: int):
     try:
-        paginas_extraidas = await rastrear_dominio(url_base=url, limite_paginas=limite)
-        
-        if not paginas_extraidas:
-            TRABAJOS_LOCALES[job_id]["status"] = "failed"
-            TRABAJOS_LOCALES[job_id]["mensaje"] = "El crawler finalizó pero no extrajo ningún contenido válido."
+        paginas_extraidas = await rastrear_dominio(
+            url_base=url, 
+            limite_paginas=limite, 
+            job_id=job_id, 
+            dict_estado=trabajos_activos
+        )
+
+        if trabajos_activos[job_id]["estado_trabajo"] == "cancelled":
             return
 
-        if not os.path.exists(DIRECTORIO_SALIDA):
-            os.makedirs(DIRECTORIO_SALIDA)
+        if not paginas_extraidas:
+            trabajos_activos[job_id]["estado_trabajo"] = "failed"
+            trabajos_activos[job_id]["mensaje"] = "No se logró extraer contenido válido de la URL."
+            return
 
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        nombre_archivo = f"conocimiento_local_{timestamp}.md"
-        ruta_completa = os.path.join(DIRECTORIO_SALIDA, nombre_archivo)
+        texto_crudo = ""
+        for i, pag in enumerate(paginas_extraidas):
+            texto_crudo += f"INDICE_REGISTRO: {str(i).zfill(4)}\nORIGEN_URL: {pag['url']}\n---\n\n{pag['markdown']}\n\n"
 
-        # Consolidación e Inyección de Índices Semánticos
-        with open(ruta_completa, "w", encoding="utf-8") as archivo_salida:
-            for indice, pagina in enumerate(paginas_extraidas, start=1):
-                url_origen = pagina.get("url", "URL Desconocida")
-                markdown_contenido = pagina.get("markdown", "")
-                
-                bloque_cabecera = (
-                    f"\n\nINDICE_REGISTRO: {indice:04d}\n"
-                    f"ORIGEN_URL: {url_origen}\n"
-                    f"---\n\n"
-                )
-                archivo_salida.write(bloque_cabecera)
-                archivo_salida.write(markdown_contenido)
+        trabajos_activos[job_id]["mensaje"] = "Aplicando optimización y deduplicación semántica (ML)..."
+        texto_optimizado = generar_corpus_optimizado(texto_crudo)
 
-        # Notificar al dashboard que finalizó con éxito
-        TRABAJOS_LOCALES[job_id]["status"] = "completed"
-        TRABAJOS_LOCALES[job_id]["total"] = len(paginas_extraidas)
-        TRABAJOS_LOCALES[job_id]["archivo"] = nombre_archivo
-        TRABAJOS_LOCALES[job_id]["mensaje"] = "Extracción y consolidación finalizada con éxito de forma local."
+        fecha_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        nombre_crudo = f"conocimiento_crudo_{fecha_str}.md"
+        nombre_opt = f"conocimiento_optimizado_{fecha_str}.md"
+        
+        ruta_crudo = os.path.join(DIR_DESCARGAS, nombre_crudo)
+        ruta_opt = os.path.join(DIR_DESCARGAS, nombre_opt)
+
+        with open(ruta_crudo, "w", encoding="utf-8") as f:
+            f.write(texto_crudo)
+            
+        with open(ruta_opt, "w", encoding="utf-8") as f:
+            f.write(texto_optimizado)
+
+        trabajos_activos[job_id].update({
+            "estado_trabajo": "completed",
+            "mensaje": "Extracción y optimización semántica finalizada con éxito.",
+            "archivo_crudo": ruta_crudo,
+            "archivo_optimizado": ruta_opt
+        })
 
     except Exception as e:
-        logger.error(f"Fallo crítico en tarea de scraping background: {str(e)}")
-        TRABAJOS_LOCALES[job_id]["status"] = "error"
-        TRABAJOS_LOCALES[job_id]["mensaje"] = str(e)
+        logger.error(f"Error en tarea de scraping {job_id}: {str(e)}")
+        trabajos_activos[job_id]["estado_trabajo"] = "error"
+        trabajos_activos[job_id]["mensaje"] = str(e)
 
-
-@router.post("/iniciar", response_model=RespuestaInicioScraping, status_code=status.HTTP_200_OK)
-async def iniciar_extraccion_conocimiento(peticion: PeticionScraping, background_tasks: BackgroundTasks):
+@router.post("/iniciar")
+async def iniciar_extraccion(request: ScrapingRequest, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
-    url_str = str(peticion.url_objetivo)
     
-    # Inicializar el estado de la tarea
-    TRABAJOS_LOCALES[job_id] = {
-        "status": "scraping",
-        "total": 0,
-        "archivo": None,
-        "mensaje": "Iniciando navegación con motor Chromium local..."
+    trabajos_activos[job_id] = {
+        "estado_trabajo": "procesando",
+        "total_paginas": 0,
+        "mensaje": "Iniciando rastreo de dominio...",
+        "archivo_crudo": None,
+        "archivo_optimizado": None
+    }
+    
+    background_tasks.add_task(ejecutar_scraping_segundo_plano, job_id, request.url_objetivo, request.limite_paginas)
+    
+    return {
+        "status": "success",
+        "job_id": job_id,
+        "mensaje": "Tarea de extracción iniciada en segundo plano."
     }
 
-    # Despachar la tarea pesada al pool asíncrono para liberar el hilo principal HTTP
-    background_tasks.add_task(tarea_scraping_segundo_plano, job_id, url_str, peticion.limite_paginas)
-    
-    return RespuestaInicioScraping(
-        estado="procesando",
-        job_id=job_id,
-        mensaje=f"Motor local inicializado para {url_str}."
-    )
-
-@router.get("/estado/{job_id}", response_model=RespuestaEstadoScraping, status_code=status.HTTP_200_OK)
-async def verificar_estado_extraccion(job_id: str):
-    trabajo = TRABAJOS_LOCALES.get(job_id)
-    
-    if not trabajo:
-        raise HTTPException(status_code=404, detail="El ID de trabajo no existe o caducó en memoria.")
-
-    estado_actual = trabajo.get("status")
-    
-    if estado_actual in ["error", "failed"]:
-        raise HTTPException(status_code=500, detail=trabajo.get("mensaje", "Fallo desconocido."))
-
-    return RespuestaEstadoScraping(
-        estado_trabajo="completed" if estado_actual == "completed" else "scraping",
-        total_paginas=trabajo.get("total", 0),
-        mensaje=trabajo.get("mensaje", "Extrayendo..."),
-        archivo_generado=trabajo.get("archivo") if estado_actual == "completed" else None
-    )
-
-@router.delete("/cancelar/{job_id}", status_code=status.HTTP_200_OK)
-async def cancelar_extraccion(job_id: str):
-    # En un hilo background simple es complejo matar el subproceso, pero podemos
-    # marcarlo como cancelado para que el dashboard reaccione.
-    if job_id in TRABAJOS_LOCALES:
-        TRABAJOS_LOCALES[job_id]["status"] = "cancelled"
-        TRABAJOS_LOCALES[job_id]["mensaje"] = "Operación abortada por el usuario."
-        return {"estado": "cancelado", "mensaje": f"Trabajo {job_id} marcado para abortar."}
-    
-    raise HTTPException(status_code=404, detail="El ID de trabajo no existe.")
-
-@router.get("/descargar/{nombre_archivo}", tags=["Administración de Conocimiento"])
-async def descargar_archivo_conocimiento(nombre_archivo: str):
-    ruta_completa = os.path.join(DIRECTORIO_SALIDA, nombre_archivo)
-    if not os.path.exists(ruta_completa):
-        raise HTTPException(status_code=404, detail="El archivo solicitado no existe en el servidor.")
+@router.get("/estado/{job_id}")
+async def consultar_estado(job_id: str):
+    if job_id not in trabajos_activos:
+        raise HTTPException(status_code=404, detail="El ID de tarea no existe.")
         
-    return FileResponse(path=ruta_completa, filename=nombre_archivo, media_type='text/markdown')
+    return trabajos_activos[job_id]
+
+@router.delete("/cancelar/{job_id}")
+async def cancelar_extraccion(job_id: str):
+    if job_id not in trabajos_activos:
+        raise HTTPException(status_code=404, detail="El ID de tarea no existe.")
+        
+    if trabajos_activos[job_id]["estado_trabajo"] in ["completed", "error", "failed"]:
+        raise HTTPException(status_code=400, detail="La tarea ya finalizó.")
+        
+    trabajos_activos[job_id]["estado_trabajo"] = "cancelled"
+    trabajos_activos[job_id]["mensaje"] = "Cancelación forzada por el usuario."
+    
+    return {"status": "success", "mensaje": "Señal de cancelación enviada al crawler."}
+
+@router.get("/descargar/{nombre_archivo}")
+async def descargar_archivo(nombre_archivo: str):
+    ruta_archivo = os.path.join(DIR_DESCARGAS, nombre_archivo)
+    
+    if not os.path.exists(ruta_archivo):
+        raise HTTPException(status_code=404, detail="El archivo solicitado no existe.")
+        
+    return FileResponse(
+        path=ruta_archivo, 
+        filename=nombre_archivo, 
+        media_type='text/markdown'
+    )
+
+# ------------------------------------------------------------------------------
+# Módulo de Programación Automática (CRON Nativo con Asyncio - Cero Dependencias)
+# ------------------------------------------------------------------------------
+import asyncio
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+from typing import Optional
+import httpx
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Estado en memoria del planificador nativo
+_cron_config = {
+    "programado": False,
+    "frecuencia": None,
+    "hora": None,
+    "dia_semana": None,
+    "url_objetivo": None,
+    "limite_paginas": None,
+    "siguiente_ejecucion": None,
+    "detalles": ""
+}
+_cron_task: Optional[asyncio.Task] = None
+
+DIAS_MAP = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+DIAS_NOMBRE = {"mon": "Lunes", "tue": "Martes", "wed": "Miércoles", "thu": "Jueves", "fri": "Viernes", "sat": "Sábado", "sun": "Domingo"}
+
+class ProgramacionRequest(BaseModel):
+    url_objetivo: str
+    limite_paginas: int
+    frecuencia: str  # "diario", "semanal"
+    hora: str        # Formato "HH:MM" (ej. "02:00")
+    dia_semana: Optional[str] = "mon"
+
+def _calcular_proxima_ejecucion(frecuencia: str, hora_str: str, dia_semana: str) -> datetime:
+    ahora = datetime.now()
+    hora, minuto = map(int, hora_str.split(":"))
+    proxima = ahora.replace(hour=hora, minute=minuto, second=0, microsecond=0)
+
+    if frecuencia == "diario":
+        if proxima <= ahora:
+            proxima += timedelta(days=1)
+    elif frecuencia == "semanal":
+        dia_objetivo = DIAS_MAP.get(dia_semana, 0)
+        dias_faltantes = (dia_objetivo - ahora.weekday()) % 7
+        proxima += timedelta(days=dias_faltantes)
+        if proxima <= ahora:
+            proxima += timedelta(days=7)
+    return proxima
+
+async def _bucle_cron_nativo():
+    """Bucle asíncrono ligero que duerme hasta la hora exacta programada."""
+    while _cron_config["programado"]:
+        proxima = _calcular_proxima_ejecucion(
+            _cron_config["frecuencia"],
+            _cron_config["hora"],
+            _cron_config["dia_semana"]
+        )
+        _cron_config["siguiente_ejecucion"] = proxima.strftime("%Y-%m-%d %H:%M:%S")
+        segundos_espera = max(1.0, (proxima - datetime.now()).total_seconds())
+        
+        logger.info(f"[CRON NATIVO] Próxima extracción programada para {_cron_config['siguiente_ejecucion']} (en {int(segundos_espera)}s)")
+        
+        try:
+            await asyncio.sleep(segundos_espera)
+            if not _cron_config["programado"]:
+                break
+                
+            logger.info(f"[CRON NATIVO] Disparando extracción automática para {_cron_config['url_objetivo']}")
+            async with httpx.AsyncClient() as client:
+                payload = {
+                    "url_objetivo": _cron_config["url_objetivo"],
+                    "limite_paginas": _cron_config["limite_paginas"]
+                }
+                await client.post("http://localhost:8000/api/v1/admin/conocimiento/iniciar", json=payload, timeout=10.0)
+            
+            # Esperar 65 segundos tras disparar para no repetir en el mismo minuto
+            await asyncio.sleep(65)
+        except asyncio.CancelledError:
+            logger.info("[CRON NATIVO] Tarea programada cancelada por el administrador.")
+            break
+        except Exception as e:
+            logger.error(f"[CRON NATIVO] Error al ejecutar extracción programada: {e}")
+            await asyncio.sleep(60)
+
+@router.post("/programar", status_code=200)
+async def programar_extraccion(config: ProgramacionRequest):
+    global _cron_task
+    if _cron_task and not _cron_task.done():
+        _cron_task.cancel()
+
+    proxima = _calcular_proxima_ejecucion(config.frecuencia, config.hora, config.dia_semana or "mon")
+    detalle_texto = f"Diario a las {config.hora}" if config.frecuencia == "diario" else f"Semanal ({DIAS_NOMBRE.get(config.dia_semana, config.dia_semana)}) a las {config.hora}"
+
+    _cron_config.update({
+        "programado": True,
+        "frecuencia": config.frecuencia,
+        "hora": config.hora,
+        "dia_semana": config.dia_semana or "mon",
+        "url_objetivo": config.url_objetivo,
+        "limite_paginas": config.limite_paginas,
+        "siguiente_ejecucion": proxima.strftime("%Y-%m-%d %H:%M:%S"),
+        "detalles": detalle_texto
+    })
+
+    _cron_task = asyncio.create_task(_bucle_cron_nativo())
+    return {"estado": "exito", "mensaje": f"Scraping programado ({detalle_texto})."}
+
+@router.get("/programacion_actual")
+async def obtener_programacion():
+    if not _cron_config["programado"]:
+        return {"programado": False}
+    return {
+        "programado": True,
+        "siguiente_ejecucion": _cron_config["siguiente_ejecucion"],
+        "detalles": _cron_config["detalles"]
+    }
+
+@router.delete("/programar")
+async def eliminar_programacion():
+    global _cron_task
+    _cron_config["programado"] = False
+    if _cron_task and not _cron_task.done():
+        _cron_task.cancel()
+    return {"estado": "exito", "mensaje": "Programación automática desactivada."}

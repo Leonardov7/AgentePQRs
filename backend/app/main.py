@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Importación de los Controladores (Routers)
-from app.api.endpoints import chat, asesores, admin_scraping
+from app.api.endpoints import chat, asesores, admin_scraping, configuracion
 
 # Inicialización de la aplicación con metadatos para la documentación automática (Swagger)
 app = FastAPI(
@@ -38,8 +38,14 @@ app.include_router(chat.router, prefix="/api/v1/chat", tags=["Interacción Estud
 app.include_router(asesores.router, prefix="/api/v1/admin", tags=["Dashboard Asesores"])
 
 # Rutas del Panel Administrativo para Gestión de Conocimiento (Scraping)
-app.include_router(admin_scraping.router, prefix="/api/v1/admin/conocimiento", tags=["Administración de Conocimiento"])
+# CORRECCIÓN APLICADA: Se ajusta el prefix a "/api/v1/admin" para que al unirse con 
+# el prefix interno "/conocimiento" de admin_scraping.py resulte exactamente en "/api/v1/admin/conocimiento/iniciar"
+app.include_router(admin_scraping.router, prefix="/api/v1/admin", tags=["Administración de Conocimiento"])
 
+
+
+# Rutas del Panel Administrativo para Configuración Global (Políticas PDF)
+app.include_router(configuracion.router, prefix="/api/v1/admin/configuracion", tags=["Configuración"])
 # ------------------------------------------------------------------------------
 # Endpoints Base de Monitoreo (Healthchecks)
 # ------------------------------------------------------------------------------

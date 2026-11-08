@@ -9,21 +9,55 @@ from sqlalchemy.future import select
 from sqlalchemy import update
 import json
 import logging
+import uuid
 
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.models import Sesion, Mensaje
-from app.schemas.chat import PeticionUsuario
+from app.schemas.chat import PeticionUsuario, InicioSesionRequest
 from app.services.dify_client import consultar_agente_dify
 from app.services.routing_engine import evaluar_y_enrutar_respuesta, _escalar_a_humano
 from app.websockets.manager import manager
-
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ------------------------------------------------------------------------------
-# 1. Endpoint REST Clásico (Usuario -> Dify / IA)
+# 1. Endpoints REST (Usuario -> Dify / IA)
 # ------------------------------------------------------------------------------
+
+@router.post("/iniciar", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def iniciar_sesion_pqr(datos: InicioSesionRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Inicializa una nueva sesión de chat PQR capturando los datos formales del usuario.
+    Retorna el sesion_id (UUID) que el widget usará para enviar los mensajes.
+    """
+    nuevo_id = uuid.uuid4()
+    
+    # Registramos el perfil completo del usuario en la base de datos desde el inicio
+    nueva_sesion = Sesion(
+        id=nuevo_id,
+        estudiante_id=datos.documento,
+        nombre_usuario=datos.nombre,
+        documento_identidad=datos.documento,
+        correo=datos.correo,
+        celular=datos.celular,
+        sede=datos.sede,
+        tipo_usuario=datos.tipo_usuario,
+        politicas_aceptadas=datos.politicas_aceptadas,
+        estado="atencion_bot"
+    )
+    
+    db.add(nueva_sesion)
+    await db.commit()
+    
+    logger.info(f"Nueva sesión PQR inicializada: {nuevo_id} para {datos.nombre} ({datos.tipo_usuario})")
+    
+    return {
+        "estado": "exito",
+        "sesion_id": str(nuevo_id),
+        "mensaje": "Sesión iniciada correctamente."
+    }
+
 @router.post("/enviar", response_model=dict, status_code=status.HTTP_200_OK)
 async def procesar_mensaje_usuario(peticion: PeticionUsuario, db: AsyncSession = Depends(get_db)):
     """
@@ -35,19 +69,12 @@ async def procesar_mensaje_usuario(peticion: PeticionUsuario, db: AsyncSession =
     resultado = await db.execute(stmt)
     sesion = resultado.scalars().first()
 
-    # Auto-crear la sesión en la primera interacción
+    # Como el chat ahora requiere formulario, si la sesión no existe, rechazamos la petición
     if not sesion:
-        sesion = Sesion(
-            id=peticion.sesion_id,
-            estudiante_id="usuario_anonimo",
-            estado="atencion_bot"
-        )
-        db.add(sesion)
-        await db.commit()
-        await db.refresh(sesion)
+        raise HTTPException(status_code=403, detail="Sesión no válida o caducada. Por favor, reinicia el chat.")
 
     if sesion.estado in ["cerrada", "ticket_asincrono"]:
-        raise HTTPException(status_code=400, detail="La sesión ya ha sido clausurada o diferida.")
+        raise HTTPException(status_code=400, detail="El caso ya ha sido gestionado o cerrado.")
 
     mensaje_usuario = Mensaje(
         sesion_id=sesion.id,
@@ -62,7 +89,7 @@ async def procesar_mensaje_usuario(peticion: PeticionUsuario, db: AsyncSession =
         logger.info(f"Sesión {sesion.id} ignorada por IA. Ya está asignada a humano.")
         return {
             "estado_sesion": sesion.estado,
-            "notificacion": "Tu sesión está asignada a un humano. Por favor, usa la conexión en tiempo real."
+            "notificacion": "Un asesor institucional ya está atendiendo tu caso. Por favor, usa la ventana de chat en vivo."
         }
     
     # ---------------------------------------------------------
@@ -73,14 +100,14 @@ async def procesar_mensaje_usuario(peticion: PeticionUsuario, db: AsyncSession =
         return {
             "sesion_id": str(sesion.id),
             "estado_actual": "en_cola",
-            "respuesta_sistema": "Te he puesto en la cola de atención. Un asesor humano se conectará contigo en breve."
+            "respuesta_sistema": "Te he transferido con nuestro equipo de atención institucional. Un asesor se conectará contigo en un momento."
         }
     
     if peticion.texto_pregunta == "/continuar":
         return {
             "sesion_id": str(sesion.id),
             "estado_actual": "atencion_bot",
-            "respuesta_sistema": "¡Entendido! Puedes escribirme tu pregunta de otra forma e intentaré buscarla nuevamente."
+            "respuesta_sistema": "¡Entendido! Cuéntame, ¿cómo más te puedo ayudar hoy?"
         }
     # ---------------------------------------------------------
 
@@ -111,30 +138,21 @@ async def procesar_mensaje_usuario(peticion: PeticionUsuario, db: AsyncSession =
     return respuesta_final
 
 # ------------------------------------------------------------------------------
-# 2. Endpoint WebSocket (Usuario <-> Asesor Humano)
+# 2. Endpoint WebSocket Unificado (Usuario <-> IA / Humano)
 # ------------------------------------------------------------------------------
 @router.websocket("/ws/{sesion_id}/{rol}")
 async def websocket_chat_humano(websocket: WebSocket, sesion_id: str, rol: str):
-    """
-    Establece un túnel bidireccional cuando la IA ya no puede responder.
-    rol: 'usuario' o 'asesor'
-    """
     await manager.connect(websocket, sesion_id, rol)
     
     try:
         while True:
-            # Espera indefinidamente a que el cliente (React) envíe un texto
             datos_recibidos = await websocket.receive_text()
             payload = json.loads(datos_recibidos)
-            
-            # Extraemos el mensaje
             texto_mensaje = payload.get("contenido", "")
             
-            # Validación básica de seguridad
             if not texto_mensaje.strip():
                 continue
 
-            # Persistencia en base de datos
             async with AsyncSessionLocal() as db:
                 nuevo_mensaje = Mensaje(
                     sesion_id=sesion_id,
@@ -142,34 +160,101 @@ async def websocket_chat_humano(websocket: WebSocket, sesion_id: str, rol: str):
                     contenido=texto_mensaje
                 )
                 db.add(nuevo_mensaje)
-                
-                if rol == "asesor":
-                    stmt = update(Sesion).where(
-                        Sesion.id == sesion_id, 
-                        Sesion.estado == 'en_cola'
-                    ).values(estado="atencion_humana")
-                    await db.execute(stmt)
-                
                 await db.commit()
 
-            # Transmisión en tiempo real al otro participante
-            mensaje_a_emitir = {
-                "tipo": "nuevo_mensaje",
-                "emisor": rol,
-                "contenido": texto_mensaje
-            }
-            # INYECCIÓN DEL FILTRO: Se pasa el parámetro sender_rol para suprimir el eco.
-            await manager.broadcast_to_session(sesion_id, mensaje_a_emitir, sender_rol=rol)
+                stmt = select(Sesion).where(Sesion.id == sesion_id)
+                resultado = await db.execute(stmt)
+                sesion = resultado.scalars().first()
+
+                if not sesion:
+                     continue
+
+                if rol == "asesor":
+                    if sesion.estado == 'en_cola':
+                         stmt_update = update(Sesion).where(Sesion.id == sesion_id).values(estado="atencion_humana")
+                         await db.execute(stmt_update)
+                         await db.commit()
+                    
+                    mensaje_a_emitir = {
+                        "tipo": "nuevo_mensaje",
+                        "emisor": "asesor",
+                        "contenido": texto_mensaje
+                    }
+                    await manager.broadcast_to_session(sesion_id, mensaje_a_emitir, sender_rol=rol)
+                
+                elif rol == "usuario":
+                    if sesion.estado == "atencion_bot":
+                         if texto_mensaje == "/escalar_humano":
+                              await _escalar_a_humano(db, sesion.id)
+                              respuesta_final = {
+                                  "tipo": "nuevo_mensaje",
+                                  "emisor": "sistema",
+                                  "contenido": "Te he puesto en la cola de atención. Un asesor humano se conectará contigo en breve."
+                              }
+                              await manager.send_personal_message(respuesta_final, websocket)
+                              continue
+                         
+                         if texto_mensaje == "/continuar":
+                              respuesta_final = {
+                                  "tipo": "nuevo_mensaje",
+                                  "emisor": "bot",
+                                  "contenido": "¡Entendido! Puedes escribirme tu pregunta de otra forma e intentaré buscarla nuevamente."
+                              }
+                              await manager.send_personal_message(respuesta_final, websocket)
+                              continue
+
+                         # Evaluar intención MANUAL del usuario antes de ir a Dify
+                         resultado_enrutamiento = await evaluar_y_enrutar_respuesta(
+                             db=db, 
+                             sesion_id=sesion.id, 
+                             peticion_usuario=texto_mensaje
+                         )
+                         
+                         # Si no hubo bypass por intención manual, consultamos a Dify
+                         if resultado_enrutamiento is None or "accion" not in resultado_enrutamiento:
+                             logger.info(f"Enviando consulta a Dify Cloud para sesión: {sesion.id}")
+                             respuesta_bruta_dify = await consultar_agente_dify(
+                                 pregunta=texto_mensaje,
+                                 identificador_usuario=str(sesion.id)
+                             )
+
+                             resultado_enrutamiento = await evaluar_y_enrutar_respuesta(
+                                 db=db, 
+                                 sesion_id=sesion.id, 
+                                 respuesta_dify=respuesta_bruta_dify
+                             )
+
+                         respuesta_final = {
+                             "tipo": "nuevo_mensaje",
+                             "emisor": "bot" if resultado_enrutamiento.get("accion") != "escalado" else "sistema",
+                             "contenido": resultado_enrutamiento["mensaje_publico"],
+                         }
+                         
+                         if "opciones" in resultado_enrutamiento:
+                             respuesta_final["opciones"] = resultado_enrutamiento["opciones"]
+
+                         await manager.send_personal_message(respuesta_final, websocket)
+
+                    elif sesion.estado in ["en_cola", "atencion_humana"]:
+                         mensaje_a_emitir = {
+                             "tipo": "nuevo_mensaje",
+                             "emisor": "usuario",
+                             "contenido": texto_mensaje
+                         }
+                         await manager.broadcast_to_session(sesion_id, mensaje_a_emitir, sender_rol=rol)
+                    else:
+                         mensaje_rechazo = {
+                             "tipo": "nuevo_mensaje",
+                             "emisor": "sistema",
+                             "contenido": "Esta sesión ya no se encuentra activa."
+                         }
+                         await manager.send_personal_message(mensaje_rechazo, websocket)
 
     except WebSocketDisconnect:
-        # El cliente cerró la pestaña o perdió conexión
         manager.disconnect(sesion_id, rol)
-        
-        # Notificar a la contraparte que el usuario se desconectó temporalmente
         mensaje_desconexion = {
             "tipo": "alerta_sistema",
             "emisor": "sistema",
-            "contenido": f"El {rol} se ha desconectado del chat."
+            "contenido": "La contraparte se ha desconectado momentáneamente del chat." if rol == 'asesor' else "El usuario ha cerrado la ventana de chat."
         }
-        # Para alertas de sistema, sí se transmite a todos los que queden (no hay sender_rol)
         await manager.broadcast_to_session(sesion_id, mensaje_desconexion)

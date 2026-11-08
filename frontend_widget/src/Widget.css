@@ -1,114 +1,410 @@
-/* ==========================================================================
-   Estilos del Widget Flotante PQR - Universidad de Cundinamarca
-   ========================================================================== */
+/* ==============================================================================
+   Widget Flotante PQR - Universidad de Cundinamarca
+   Diseño aislado para inyección en el portal web corporativo
+   ============================================================================== */
 
-.pqr-widget-container {
+.udec-widget-root {
   position: fixed;
   bottom: 20px;
   right: 20px;
-  width: 350px;
-  height: 500px;
+  z-index: 999999;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ---------------------------------------------------------
+   Lanzador Flotante (Avatar) y Tooltip
+   --------------------------------------------------------- */
+.udec-launcher-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.udec-tooltip {
+  background-color: #ffffff;
+  color: #333;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  animation: fadeSlideUp 0.4s ease-out forwards;
+  position: relative;
+  font-weight: 500;
+}
+
+/* Cola del globo de diálogo */
+.udec-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  right: 20px;
+  width: 12px;
+  height: 12px;
+  background-color: #ffffff;
+  transform: rotate(45deg);
+}
+
+.udec-launcher-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #1b4d3e; /* Verde UdeC */
+  color: white;
+  border: none;
+  box-shadow: 0 4px 15px rgba(27, 77, 62, 0.4);
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: transform 0.2s ease, background-color 0.2s;
+}
+
+.udec-launcher-btn:hover {
+  transform: scale(1.08);
+  background-color: #143a2e;
+}
+
+/* ---------------------------------------------------------
+   Panel de Chat
+   --------------------------------------------------------- */
+.udec-chat-panel {
+  width: 360px;
+  height: 600px;
+  max-height: calc(100vh - 40px);
   background-color: #ffffff;
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  z-index: 9999;
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.pqr-widget-header {
-  background-color: #2e7d32; /* Verde Institucional UdeC */
+.udec-chat-header {
+  background-color: #1b4d3e;
   color: white;
-  padding: 15px;
-  font-weight: bold;
+  padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.pqr-status-indicator {
-  font-size: 0.8em;
-  background-color: rgba(255, 255, 255, 0.2);
-  padding: 4px 8px;
-  border-radius: 12px;
+.udec-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.pqr-messages-area {
-  flex: 1;
+.udec-header-avatar {
+  background-color: rgba(255,255,255,0.2);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.udec-close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.udec-close-btn:hover {
+  opacity: 1;
+}
+
+.udec-chat-body {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8f9fa;
+  overflow: hidden; /* Evita que el hijo empuje los bordes */
+}
+
+/* ---------------------------------------------------------
+   Formulario Pre-Chat
+   --------------------------------------------------------- */
+.udec-prechat-wrapper {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto; /* Scroll interno solo si la pantalla es muy pequeña */
+}
+
+.udec-prechat-message {
+  background-color: #e8f5e9;
+  border-left: 4px solid #2e7d32;
+  padding: 10px 15px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.udec-prechat-message p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #1b4d3e;
+  line-height: 1.4;
+}
+
+.udec-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.udec-form input,
+.udec-form select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background-color: #ffffff;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.udec-form input:focus,
+.udec-form select:focus {
+  border-color: #1b4d3e;
+}
+
+.udec-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #555;
+  margin-top: 4px;
+}
+
+.udec-checkbox input {
+  width: auto;
+  margin-top: 2px;
+}
+
+.udec-checkbox a {
+  color: #1b4d3e;
+  text-decoration: underline;
+}
+
+.udec-submit-btn {
+  background-color: #1b4d3e;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background-color 0.2s;
+}
+
+.udec-submit-btn:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------
+   Interfaz del Chat en Vivo
+   --------------------------------------------------------- */
+.udec-chat-messages-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.udec-messages-scroll {
+  flex-grow: 1;
   padding: 15px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  background-color: #f9f9f9;
+  gap: 12px;
 }
 
-.message-bubble {
-  max-width: 80%;
-  padding: 10px 14px;
-  border-radius: 18px;
-  font-size: 0.9em;
-  line-height: 1.4;
+.udec-bubble-wrapper {
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
 }
 
-.message-estudiante {
+.udec-bubble-wrapper.derecha {
   align-self: flex-end;
-  background-color: #dcf8c6;
-  color: #000;
-  border-bottom-right-radius: 4px;
 }
 
-.message-bot, .message-asesor {
+.udec-bubble-wrapper.izquierda {
   align-self: flex-start;
+}
+
+.udec-bubble-wrapper.sistema {
+  align-self: center;
+  max-width: 95%;
+}
+
+.udec-asesor-tag {
+  font-size: 0.65rem;
+  color: #e67e22;
+  font-weight: 700;
+  margin-bottom: 3px;
+  margin-left: 2px;
+}
+
+.udec-bubble {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.udec-bubble-wrapper.derecha .udec-bubble {
+  background-color: #1b4d3e;
+  color: white;
+  border-bottom-right-radius: 2px;
+}
+
+.udec-bubble-wrapper.izquierda .udec-bubble {
   background-color: #ffffff;
   color: #333;
-  border: 1px solid #e0e0e0;
-  border-bottom-left-radius: 4px;
+  border: 1px solid #e5e7eb;
+  border-bottom-left-radius: 2px;
 }
 
-.message-sistema {
-  align-self: center;
-  background-color: transparent;
-  color: #888;
-  font-size: 0.8em;
-  font-style: italic;
-  max-width: 100%;
+.udec-bubble-wrapper.sistema .udec-bubble {
+  background-color: #fef3c7;
+  color: #92400e;
+  font-size: 0.8rem;
   text-align: center;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
 }
 
-.pqr-input-area {
+/* Zona de Input de Texto */
+.udec-chat-input-form {
   display: flex;
-  padding: 10px;
+  padding: 12px;
   background-color: #ffffff;
-  border-top: 1px solid #eeeeee;
+  border-top: 1px solid #e5e7eb;
+  gap: 8px;
 }
 
-.pqr-input-area input {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid #cccccc;
+.udec-chat-input-form input {
+  flex-grow: 1;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
   border-radius: 20px;
   outline: none;
+  font-size: 0.9rem;
 }
 
-.pqr-input-area button {
-  background-color: #2e7d32;
+.udec-chat-input-form input:focus {
+  border-color: #1b4d3e;
+}
+
+.udec-chat-input-form button {
+  background-color: #1b4d3e;
   color: white;
   border: none;
-  border-radius: 50%;
   width: 40px;
   height: 40px;
-  margin-left: 10px;
-  cursor: pointer;
+  border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
+  cursor: pointer;
   transition: background-color 0.2s;
 }
 
-.pqr-input-area button:disabled {
-  background-color: #aaaaaa;
+.udec-chat-input-form button:disabled {
+  background-color: #9ca3af;
   cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------
+   Animaciones
+   --------------------------------------------------------- */
+@keyframes popIn {
+  0% { transform: scale(0.9) translateY(20px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes fadeSlideUp {
+  0% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+/* ---------------------------------------------------------
+   Elementos Restaurados (Botones Interactivos e Indicador)
+   --------------------------------------------------------- */
+.widget-opciones-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.widget-opcion-btn {
+  background-color: #ffffff;
+  color: #1b4d3e;
+  border: 1px solid #1b4d3e;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.widget-opcion-btn:hover {
+  background-color: #e8f5e9;
+}
+
+/* Indicador Animado (Sombreado) */
+.escribiendo-indicador {
+  font-style: italic;
+  opacity: 0.7;
+  background-color: #f1f3f4 !important;
+  color: #555 !important;
+  border: 1px dashed #ccc !important;
+  animation: pulseOpacity 1.5s infinite;
+}
+
+@keyframes pulseOpacity {
+  0% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+  100% { opacity: 0.5; }
+}
+
+/* ---------------------------------------------------------
+   Iconos en Formulario (Nuevos Vectores Monocromáticos)
+   --------------------------------------------------------- */
+.udec-input-group {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* Espacio limpio entre el icono y la caja */
+}
+
+.udec-input-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #777; /* Gris monocromático sobrio */
+  flex-shrink: 0;
+}
+
+.udec-form .udec-input-group input,
+.udec-form .udec-input-group select {
+  flex: 1; /* Permite que la caja ocupe el resto del espacio */
 }

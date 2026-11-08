@@ -1,0 +1,229 @@
+/* Overlay oscuro detrás del panel */
+.config-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 9999;
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Panel Deslizable derecho */
+.config-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 400px;
+  height: 100vh;
+  background-color: #ffffff;
+  z-index: 10000;
+  box-shadow: -5px 0 25px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  animation: slideIn 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+/* Cabecera del Panel */
+.config-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.2rem 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #f8f9fa;
+  height: 70px;
+  box-sizing: border-box;
+}
+
+.config-title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #1b4d3e;
+}
+
+.config-back-btn {
+  background: none;
+  border: none;
+  color: #1b4d3e;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  transition: opacity 0.2s;
+}
+
+.config-back-btn:hover {
+  opacity: 0.7;
+}
+
+.config-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: #666;
+  cursor: pointer;
+}
+
+.config-close-btn:hover {
+  color: #d32f2f;
+}
+
+/* Cuerpo del Panel */
+.config-drawer-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Elementos del Menú Principal */
+.config-menu-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #ffffff;
+}
+
+.config-menu-item:hover {
+  border-color: #1b4d3e;
+  background-color: #f3f8f5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(27, 77, 62, 0.08);
+}
+
+.config-menu-item.futuro {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.config-menu-item.futuro:hover {
+  transform: none;
+  box-shadow: none;
+  background-color: #ffffff;
+  border-color: #eaeaea;
+}
+
+.config-item-icon {
+  font-size: 1.8rem;
+  margin-right: 15px;
+}
+
+.config-item-text {
+  flex: 1;
+}
+
+.config-item-text h5 {
+  margin: 0 0 4px 0;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.config-item-text p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #777;
+  line-height: 1.3;
+}
+
+.config-item-arrow {
+  font-size: 1.5rem;
+  color: #aaa;
+  margin-left: 10px;
+}
+
+/* Submódulo de Políticas */
+.config-submodulo {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.config-descripcion {
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.config-file-label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #444;
+  gap: 8px;
+}
+
+.config-file-label input {
+  padding: 10px;
+  border: 1px dashed #ccc;
+  border-radius: 6px;
+  font-weight: normal;
+  cursor: pointer;
+  background-color: #fdfdfd;
+}
+
+.config-btn-submit {
+  padding: 12px;
+  background-color: #1b4d3e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.config-btn-submit:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.config-btn-submit:hover:not(:disabled) {
+  background-color: #12352a;
+}
+
+.config-alerta {
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 15px;
+}
+
+.config-alerta.exito {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.config-alerta.error {
+  background-color: #fdecea;
+  color: #d32f2f;
+  border: 1px solid #f8bbd0;
+}
+
+/* Animaciones */
+@keyframes slideIn {
+  to { transform: translateX(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

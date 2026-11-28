@@ -1,0 +1,181 @@
+/* ==============================================================================
+   Gestión de Conocimiento - estilos propios de la pantalla (prefijo gc-)
+   Respeta la paleta de la consola: verde institucional #1b4d3e, verdes suaves,
+   grises azulados y fondo #f0f2f5. No modifica ninguna clase global de Dashboard.css.
+   ============================================================================== */
+
+.gc-page {
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+  min-width: 0;
+  padding: 1.75rem 2rem 3rem;
+  color: #334155;
+}
+
+/* ---------- Encabezado ---------- */
+.gc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.gc-header h2 { font-size: 1.35rem; color: #1b4d3e; font-weight: 600; margin: 0; }
+.gc-header p { font-size: 0.85rem; color: #64748b; margin: 4px 0 0 0; max-width: 640px; }
+
+/* ---------- Avisos ---------- */
+.gc-aviso {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  padding: 0.65rem 0.9rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 1rem;
+  border: 1px solid;
+}
+.gc-aviso--ok { background: #e8f5e9; border-color: #c8e6c9; color: #1b4d3e; }
+.gc-aviso--error { background: #fdecea; border-color: #f5c6cb; color: #9b1c1c; }
+.gc-aviso button { background: none; border: none; cursor: pointer; font-size: 1.1rem; color: inherit; line-height: 1; }
+
+/* ---------- Franja de resumen ---------- */
+.gc-resumen {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.gc-resumen-item {
+  background: #fff; border-radius: 8px; padding: 0.9rem 1.1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-left: 4px solid #1b4d3e; min-width: 0;
+}
+.gc-resumen-item small { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 4px; }
+.gc-resumen-item strong { display: block; font-size: 0.95rem; color: #1e293b; font-weight: 600; overflow-wrap: anywhere; }
+
+.gc-punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+
+/* ---------- Rejilla principal ---------- */
+.gc-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+.gc-col { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
+
+/* ---------- Tarjetas ---------- */
+.gc-card {
+  background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  padding: 1.25rem; min-width: 0;
+}
+.gc-card + .gc-card { margin-top: 0; }
+.gc-card-head { border-bottom: 1px solid #e2e8f0; padding-bottom: 0.7rem; margin-bottom: 1rem; }
+.gc-card-head h3 { font-size: 0.95rem; color: #1b4d3e; font-weight: 600; margin: 0; }
+.gc-card-head p { font-size: 0.78rem; color: #64748b; margin: 3px 0 0 0; }
+.gc-nota { font-size: 0.75rem; color: #64748b; margin-top: 0.7rem; line-height: 1.4; }
+
+/* ---------- Formularios ---------- */
+.gc-campo { margin-bottom: 0.9rem; min-width: 0; }
+.gc-campo > label { display: block; font-size: 0.78rem; font-weight: 600; color: #475569; margin-bottom: 4px; }
+.gc-campo input[type="url"],
+.gc-campo input[type="number"],
+.gc-campo input[type="time"],
+.gc-campo input[type="date"],
+.gc-campo input[type="text"],
+.gc-campo select {
+  width: 100%; height: 36px; padding: 0 0.7rem; font-size: 0.85rem; color: #1e293b;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; outline: none;
+}
+.gc-campo input:focus, .gc-campo select:focus { border-color: #1b4d3e; box-shadow: 0 0 0 3px rgba(27,77,62,0.12); }
+.gc-campo input:disabled, .gc-campo select:disabled { background: #f1f5f9; color: #94a3b8; }
+.gc-fila { display: flex; gap: 0.75rem; }
+.gc-fila > * { flex: 1; min-width: 0; }
+
+/* Selector segmentado */
+.gc-segmentos { display: flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; }
+.gc-segmentos button {
+  flex: 1; height: 34px; border: none; background: #fff; color: #475569;
+  font-size: 0.8rem; cursor: pointer; border-right: 1px solid #cbd5e1;
+}
+.gc-segmentos button:last-child { border-right: none; }
+.gc-segmentos button.activo { background: #1b4d3e; color: #fff; font-weight: 600; }
+.gc-segmentos button:disabled { cursor: not-allowed; opacity: 0.6; }
+
+/* ---------- Botones ---------- */
+.gc-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 36px; padding: 0 1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
+  cursor: pointer; border: 1px solid #1b4d3e; background: #1b4d3e; color: #fff;
+  transition: background 0.15s, border-color 0.15s, color 0.15s; white-space: nowrap;
+}
+.gc-btn:hover:not(:disabled) { background: #153d31; border-color: #153d31; }
+.gc-btn:disabled { background: #cbd5e1; border-color: #cbd5e1; color: #fff; cursor: not-allowed; }
+.gc-btn--block { width: 100%; }
+.gc-btn--secundario { background: #fff; color: #1b4d3e; }
+.gc-btn--secundario:hover:not(:disabled) { background: #e8f5e9; border-color: #1b4d3e; }
+.gc-btn--secundario:disabled { background: #fff; color: #94a3b8; border-color: #e2e8f0; }
+.gc-btn--peligro { background: #fff; color: #b42318; border-color: #f1c5c0; }
+.gc-btn--peligro:hover:not(:disabled) { background: #fdecea; border-color: #e8a29a; }
+.gc-btn--peligro:disabled { background: #fff; color: #cbd5e1; border-color: #e2e8f0; }
+.gc-btn--sm { height: 30px; padding: 0 0.75rem; font-size: 0.78rem; }
+
+/* ---------- Estado de programación ---------- */
+.gc-programacion { background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 6px; padding: 0.9rem; }
+.gc-programacion strong { display: block; color: #1b4d3e; font-size: 0.85rem; margin-bottom: 6px; }
+.gc-programacion p { font-size: 0.8rem; color: #334155; margin: 0 0 4px 0; }
+.gc-programacion .gc-btn { margin-top: 0.7rem; }
+
+/* ---------- Registro de actividad ---------- */
+.gc-registro { min-height: 0; background: #0f172a; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.12); min-width: 0; }
+.gc-registro-head { padding: 0.85rem 1.2rem; background: #1e293b; border-bottom: 1px solid #334155; }
+.gc-registro-head h3 { margin: 0; font-size: 0.9rem; color: #f8fafc; font-weight: 600; }
+.gc-registro-head p { margin: 3px 0 0 0; font-size: 0.75rem; color: #94a3b8; }
+.gc-registro-cuerpo { flex: 1; min-height: 430px; max-height: 640px; overflow-y: auto; padding: 0.9rem 1.2rem; font-family: Consolas, 'Courier New', monospace; font-size: 0.76rem; line-height: 1.5; }
+.gc-registro-vacio { color: #64748b; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 0.82rem; }
+.gc-linea { margin-bottom: 3px; overflow-wrap: anywhere; }
+.gc-linea .gc-hora { color: #64748b; margin-right: 8px; }
+.gc-linea .gc-tag { margin-right: 8px; font-weight: 600; color: #7dd3fc; }
+.gc-linea .gc-texto { color: #e2e8f0; }
+.gc-linea.exito .gc-tag { color: #34d399; }
+.gc-linea.error .gc-tag, .gc-linea.error .gc-texto { color: #f87171; }
+.gc-linea.aviso .gc-tag { color: #fbbf24; }
+
+/* ---------- Estados (chips) ---------- */
+.gc-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; border: 1px solid; }
+.gc-chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.gc-chip--ok { background: #e8f5e9; border-color: #c8e6c9; color: #1b4d3e; } .gc-chip--ok i { background: #2e7d32; }
+.gc-chip--proceso { background: #fff7e0; border-color: #f6e0a1; color: #92400e; } .gc-chip--proceso i { background: #f59e0b; }
+.gc-chip--error { background: #fdecea; border-color: #f5c6cb; color: #9b1c1c; } .gc-chip--error i { background: #ef4444; }
+
+/* ---------- Documentos adicionales ---------- */
+.gc-documentos { margin-top: 1.25rem; }
+.gc-subida { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
+.gc-subida .gc-campo { flex: 1 1 260px; margin-bottom: 0; }
+.gc-archivo { display: flex; align-items: center; gap: 10px; min-width: 0; height: 36px; }
+.gc-archivo span { font-size: 0.82rem; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.gc-archivo input[type="file"] { display: none; }
+
+.gc-tabla-wrap { width: 100%; overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 0.5rem; }
+.gc-tabla { width: 100%; border-collapse: collapse; font-size: 0.83rem; background: #fff; min-width: 640px; }
+.gc-tabla th { background: #f1f5f9; padding: 10px 12px; text-align: left; color: #475569; font-weight: 600; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+.gc-tabla td { padding: 10px 12px; border-bottom: 1px solid #eef2f6; color: #334155; vertical-align: middle; }
+.gc-tabla tr:last-child td { border-bottom: none; }
+.gc-tabla tr:hover td { background: #fafbfc; }
+.gc-tabla .gc-nombre { color: #1b4d3e; font-weight: 600; overflow-wrap: anywhere; min-width: 180px; }
+.gc-tabla .gc-acciones { text-align: right; white-space: nowrap; }
+.gc-tabla .gc-acciones .gc-btn + .gc-btn { margin-left: 8px; }
+.gc-vacio { text-align: center; color: #94a3b8; font-size: 0.85rem; padding: 1.6rem 0.5rem; }
+.gc-subtitulo { font-size: 0.85rem; font-weight: 600; color: #1b4d3e; margin: 1.5rem 0 0.2rem 0; }
+
+/* ---------- Ventanas (modales) propias ---------- */
+.modal-content.gc-modal { width: 92%; max-width: 920px; height: auto; max-height: 88vh; }
+.modal-content.gc-modal.gc-modal--chico { max-width: 460px; }
+.modal-content.gc-modal .modal-body { background: #f8f9fa; overflow-y: auto; }
+.gc-modal-pie { display: flex; justify-content: flex-end; gap: 10px; padding: 0.8rem 1.2rem; border-top: 1px solid #e2e8f0; background: #fff; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+.gc-datos { display: flex; flex-wrap: wrap; gap: 1.5rem; font-size: 0.85rem; color: #334155; margin-bottom: 0.8rem; }
+.gc-fragmento { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.78rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin: 8px 0; font-family: Consolas, monospace; line-height: 1.45; }
+.gc-alerta { font-size: 0.8rem; color: #92400e; background: #fef3c7; padding: 6px 10px; border-radius: 6px; margin-bottom: 6px; }
+
+/* ---------- Adaptación a pantallas pequeñas ---------- */
+@media (max-width: 1000px) {
+  .gc-grid { grid-template-columns: minmax(0, 1fr); }
+  .gc-resumen { grid-template-columns: minmax(0, 1fr); }
+  .gc-page { padding: 1.25rem 1rem 2rem; }
+}

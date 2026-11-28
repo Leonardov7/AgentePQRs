@@ -16,3 +16,5 @@ numpy
 apscheduler==3.10.4
 httpx>=0.24.0
 python-multipart
+pypdf
+python-docx

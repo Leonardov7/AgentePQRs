@@ -8,8 +8,8 @@ const AdminHistorial = () => {
   const [sesiones, setSesiones] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
+  const [filtroFecha, setFiltroFecha] = useState("");
   
-  // Estado para el modal de lectura
   const [sesionActiva, setSesionActiva] = useState(null);
   const [transcripcion, setTranscripcion] = useState([]);
 
@@ -40,12 +40,18 @@ const AdminHistorial = () => {
     }
   };
 
-  // Filtrado rápido
-  const sesionesFiltradas = sesiones.filter(s => 
-    s.nombre.toLowerCase().includes(busqueda.toLowerCase()) || 
-    s.documento.includes(busqueda) || 
-    s.correo.toLowerCase().includes(busqueda.toLowerCase())
-  );
+  const calcularDuracion = (inicio, fin) => {
+    const diff = (new Date(fin) - new Date(inicio)) / 60000; 
+    return Math.max(diff, 1).toFixed(0); 
+  };
+
+  const sesionesFiltradas = sesiones.filter(s => {
+    const cumpleBusqueda = s.nombre.toLowerCase().includes(busqueda.toLowerCase()) || 
+                           s.documento.includes(busqueda) || 
+                           s.correo.toLowerCase().includes(busqueda.toLowerCase());
+    const cumpleFecha = filtroFecha ? s.creado.startsWith(filtroFecha) : true;
+    return cumpleBusqueda && cumpleFecha;
+  });
 
   return (
     <div className="estadisticas-container">
@@ -54,6 +60,12 @@ const AdminHistorial = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2 style={{ color: '#1b4d3e', margin: 0 }}>Historial de Conversaciones</h2>
           <div style={{ display: 'flex', gap: '10px' }}>
+            <input 
+              type="date" 
+              value={filtroFecha}
+              onChange={(e) => setFiltroFecha(e.target.value)}
+              style={{ padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px' }}
+            />
             <input 
               type="text" 
               placeholder="Buscar por cédula, nombre o correo..." 
@@ -76,7 +88,7 @@ const AdminHistorial = () => {
                   <th style={{ padding: '12px' }}>Usuario</th>
                   <th style={{ padding: '12px' }}>Identificación</th>
                   <th style={{ padding: '12px' }}>Contacto</th>
-                  <th style={{ padding: '12px' }}>Estado y Resolución</th>
+                  <th style={{ padding: '12px' }}>Estado y Duración</th>
                   <th style={{ padding: '12px', textAlign: 'center' }}>Auditoría</th>
                 </tr>
               </thead>
@@ -96,9 +108,8 @@ const AdminHistorial = () => {
                         {s.estado.toUpperCase().replace('_', ' ')}
                       </span>
                       <br/>
-                      {/* Indicador de intervención humana */}
-                      <span style={{fontSize: '0.7rem', color: '#555'}}>
-                        {s.estado === 'cerrada' ? 'Finalizado' : 'Activo'}
+                      <span style={{fontSize: '0.75rem', color: '#555', fontWeight: 'bold'}}>
+                        Total: {calcularDuracion(s.creado, s.actualizado)} min.
                       </span>
                     </td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
@@ -122,7 +133,6 @@ const AdminHistorial = () => {
         </div>
       </div>
 
-      {/* MODAL DE TRANSCRIPCIÓN */}
       {sesionActiva && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: 'white', width: '600px', height: '80vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
@@ -131,8 +141,10 @@ const AdminHistorial = () => {
               <button onClick={() => setSesionActiva(null)} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
             </div>
             
-            <div style={{ padding: '1rem 1.5rem', backgroundColor: '#f8f9fa', borderBottom: '1px solid #eee', fontSize: '0.8rem', color: '#555' }}>
-              <strong>ID:</strong> {sesionActiva.id}
+            <div style={{ padding: '1rem 1.5rem', backgroundColor: '#f8f9fa', borderBottom: '1px solid #eee', fontSize: '0.8rem', color: '#555', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div><strong>Documento:</strong> {sesionActiva.documento} | <strong>Correo:</strong> {sesionActiva.correo} | <strong>Celular:</strong> {sesionActiva.celular}</div>
+              <div><strong>Sede/Rol:</strong> {sesionActiva.sede} ({sesionActiva.rol})</div>
+              <div><strong>Duración Total de la Sesión:</strong> {calcularDuracion(sesionActiva.creado, sesionActiva.actualizado)} minutos</div>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>

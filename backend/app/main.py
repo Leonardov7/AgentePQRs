@@ -7,8 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Importación de los Controladores (Routers)
-from app.api.endpoints import chat, asesores, admin_scraping, configuracion
-
+from app.api.endpoints import chat, asesores, admin_scraping, configuracion, admin_documentos
 # Inicialización de la aplicación con metadatos para la documentación automática (Swagger)
 app = FastAPI(
     title="API Orquestador PQR UdeC",
@@ -32,6 +31,8 @@ app.add_middleware(
 # ------------------------------------------------------------------------------
 # Acoplamos el router de chat que creamos en el paso anterior.
 # Todas las rutas dentro de chat.py ahora estarán prefijadas con /api/v1/chat
+
+app.include_router(admin_documentos.router, prefix="/api/v1/admin", tags=["Documentos Adicionales"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Interacción Estudiantes"])
 
 # Rutas del Panel Administrativo para Gestión de Asesores

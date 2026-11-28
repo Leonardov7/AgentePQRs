@@ -1,174 +1,176 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../Dashboard.css';
+import '../GestionConocimiento.css';
+import PanelDocumentos from '../components/PanelDocumentos';
+
+const API = 'http://localhost:8000/api/v1/admin/conocimiento';
+
+// Estado de la actualización -> texto para el usuario y color del indicador
+const ESTADOS = {
+  inactivo:   { texto: 'En espera',   color: '#cbd5e1' },
+  procesando: { texto: 'En curso',    color: '#f59e0b' },
+  completado: { texto: 'Completada',  color: '#2e7d32' },
+  error:      { texto: 'Con errores', color: '#ef4444' },
+  cancelado:  { texto: 'Cancelada',   color: '#94a3b8' },
+};
+
+// Convierte una línea del registro "[fecha hora] [ETIQUETA] mensaje" en partes para mostrarla ordenada
+const parsearLinea = (linea) => {
+  const m = linea.match(/^\[\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})\]\s*(?:\[([^\]]+)\])?\s*(.*)$/);
+  if (!m) return { hora: '', etiqueta: '', texto: linea, clase: '' };
+  const etiqueta = m[2] || '';
+  let clase = '';
+  if (/ERROR|FALL/i.test(etiqueta) || /^(error|fallo)/i.test(m[3])) clase = 'error';
+  else if (/[ÉE]XITO/i.test(etiqueta)) clase = 'exito';
+  else if (/AVISO|PAUSA/i.test(etiqueta)) clase = 'aviso';
+  return { hora: m[1], etiqueta, texto: m[3], clase };
+};
 
 const AdminConocimiento = () => {
-  // Estados originales
+  // ---------------- Actualización manual ----------------
   const [urlObjetivo, setUrlObjetivo] = useState('https://www.ucundinamarca.edu.co/');
   const [limitePaginas, setLimitePaginas] = useState(15);
   const [modoInfinito, setModoInfinito] = useState(false);
-  const [estadoTrabajo, setEstadoTrabajo] = useState('inactivo'); 
+  const [estadoTrabajo, setEstadoTrabajo] = useState('inactivo');
   const [jobId, setJobId] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [progresoPaginas, setProgresoPaginas] = useState(0);
-  
-  const [archivoCrudo, setArchivoCrudo] = useState(null);
-  const [archivoOptimizado, setArchivoOptimizado] = useState(null);
 
-  // NUEVOS Estados para Programación CRON
+  // ---------------- Registro de actividad ----------------
+  const [logs, setLogs] = useState([]);
+  const consolaRef = useRef(null);
+
+  // ---------------- Actualización programada ----------------
   const [cronFrecuencia, setCronFrecuencia] = useState('diario');
   const [cronHora, setCronHora] = useState('02:00');
   const [cronDia, setCronDia] = useState('mon');
+  const [cronFechaInicio, setCronFechaInicio] = useState('');
+  const [cronFechaFin, setCronFechaFin] = useState('');
   const [programacionActiva, setProgramacionActiva] = useState(null);
 
-  const consolaRef = useRef(null);
+  // ---------------- Historial (ventana) ----------------
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [historialArchivos, setHistorialArchivos] = useState([]);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
 
-  // Efecto original para autoscroll
+  // ---------------- Avisos ----------------
+  const [aviso, setAviso] = useState(null);   // { tipo: 'ok' | 'error', texto }
+  const mostrarAviso = useCallback((tipo, texto) => setAviso({ tipo, texto }), []);
   useEffect(() => {
-    if (consolaRef.current) {
-      consolaRef.current.scrollTop = consolaRef.current.scrollHeight;
-    }
+    if (!aviso) return undefined;
+    const t = setTimeout(() => setAviso(null), 9000);
+    return () => clearTimeout(t);
+  }, [aviso]);
+
+  // Desplazamiento automático del registro
+  useEffect(() => {
+    if (consolaRef.current) consolaRef.current.scrollTop = consolaRef.current.scrollHeight;
   }, [logs]);
 
-  // NUEVO Efecto para cargar estado de programación al iniciar
-  useEffect(() => {
-    cargarProgramacionActual();
-  }, []);
-
+  // ---------------- Carga de datos ----------------
   const cargarProgramacionActual = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/admin/conocimiento/programacion_actual');
+      const res = await fetch(`${API}/programacion_actual`);
       const data = await res.json();
-      if (data.programado) {
-        setProgramacionActiva(data);
-      } else {
-        setProgramacionActiva(null);
-      }
+      setProgramacionActiva(data.programado ? data : null);
     } catch (error) {
-      console.error("Error al cargar programación:", error);
+      console.error('Error al cargar programación:', error);
     }
   };
 
-  // Efecto original para consultar estado del trabajo manual
+  const cargarHistorialArchivos = async () => {
+    setCargandoHistorial(true);
+    try {
+      const res = await fetch(`${API}/historial-archivos`);
+      const data = await res.json();
+      setHistorialArchivos(data.archivos || []);
+    } catch (error) {
+      console.error('Error cargando archivos físicos:', error);
+    } finally {
+      setCargandoHistorial(false);
+    }
+  };
+
   useEffect(() => {
-    let intervaloConsulta;
-
-    const verificarEstado = async () => {
+    cargarProgramacionActual();
+    cargarHistorialArchivos();
+    const buscarLogs = async () => {
       try {
-        const respuesta = await fetch(`http://localhost:8000/api/v1/admin/conocimiento/estado/${jobId}`);
-        
-        if (!respuesta.ok) {
-          throw new Error('Fallo en la comunicación con el servidor al verificar estado.');
-        }
+        const res = await fetch(`${API}/logs`);
+        if (res.ok) setLogs((await res.json()).logs);
+      } catch (error) { /* se ignora para no saturar la consola */ }
+    };
+    buscarLogs();
+    const intervalo = setInterval(buscarLogs, 3000);
+    return () => clearInterval(intervalo);
+    
+  }, []);
 
-        const datos = await respuesta.json();
-        
-        setProgresoPaginas(datos.total_paginas);
-        agregarLog(`[INFO] Estado actual: ${datos.estado_trabajo} | Páginas procesadas: ${datos.total_paginas}`);
-
-        if (datos.estado_trabajo === 'completed') {
-          setEstadoTrabajo('completado');
-          agregarLog(`[ÉXITO] ${datos.mensaje}`);
-          
-          if (datos.archivo_crudo) {
-            agregarLog(`[ARCHIVO] Base de conocimiento original (cruda) guardada.`);
-            const nombreCrudo = datos.archivo_crudo.split('\\').pop().split('/').pop();
-            setArchivoCrudo(nombreCrudo);
-          }
-          
-          if (datos.archivo_optimizado) {
-            agregarLog(`[ARCHIVO] Base de conocimiento optimizada por ML guardada.`);
-            const nombreOptimizado = datos.archivo_optimizado.split('\\').pop().split('/').pop();
-            setArchivoOptimizado(nombreOptimizado);
-          }
-        } else if (datos.estado_trabajo === 'failed' || datos.estado_trabajo === 'error') {
-          setEstadoTrabajo('error');
-          agregarLog(`[ERROR] El proceso de extracción falló: ${datos.mensaje}`);
-        } else if (datos.estado_trabajo === 'cancelled') {
-          setEstadoTrabajo('cancelado');
-          agregarLog(`[CANCELADO] El proceso fue detenido por el administrador.`);
-        }
-
+  // Seguimiento del trabajo manual
+  useEffect(() => {
+    let intervalo;
+    const verificar = async () => {
+      try {
+        const res = await fetch(`${API}/estado/${jobId}`);
+        if (!res.ok) return;
+        const datos = await res.json();
+        if (datos.estado_trabajo === 'completed') { setEstadoTrabajo('completado'); cargarHistorialArchivos(); }
+        else if (datos.estado_trabajo === 'failed' || datos.estado_trabajo === 'error') setEstadoTrabajo('error');
+        else if (datos.estado_trabajo === 'cancelled') setEstadoTrabajo('cancelado');
       } catch (error) {
         setEstadoTrabajo('error');
-        agregarLog(`[ERROR SISTEMA] ${error.message}`);
       }
     };
-
-    if (jobId && estadoTrabajo === 'procesando') {
-      intervaloConsulta = setInterval(verificarEstado, 5000);
-    }
-
-    return () => clearInterval(intervaloConsulta);
+    if (jobId && estadoTrabajo === 'procesando') intervalo = setInterval(verificar, 5000);
+    return () => clearInterval(intervalo);
   }, [jobId, estadoTrabajo]);
 
-  const agregarLog = (mensaje) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setLogs((prevLogs) => [...prevLogs, `[${timestamp}] ${mensaje}`]);
-  };
-
-  // Función original de inicio manual
+  // ---------------- Acciones ----------------
   const iniciarScraping = async (e) => {
     e.preventDefault();
     setEstadoTrabajo('procesando');
     setJobId(null);
-    setLogs([]);
-    setProgresoPaginas(0);
-    setArchivoCrudo(null);
-    setArchivoOptimizado(null);
-    
-    agregarLog(`[SISTEMA] Iniciando secuencia de extracción para ${urlObjetivo}`);
-
+    setLogs([]);                       // cada actualización empieza con el registro limpio
     try {
-      const respuesta = await fetch('http://localhost:8000/api/v1/admin/conocimiento/iniciar', {
+      const res = await fetch(`${API}/iniciar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url_objetivo: urlObjetivo,
-          limite_paginas: modoInfinito ? 999999 : parseInt(limitePaginas, 10)
+          limite_paginas: modoInfinito ? 999999 : parseInt(limitePaginas, 10),
         }),
       });
-
-      const datos = await respuesta.json();
-
-      if (!respuesta.ok) {
-        throw new Error(datos.detail || 'Error al iniciar el proceso en el servidor.');
-      }
-
-      setJobId(datos.job_id);
-      agregarLog(`[CONEXIÓN] ${datos.mensaje}`);
-      agregarLog(`[INFO] ID de Tarea Asignado: ${datos.job_id}`);
-      
+      const datos = await res.json();
+      if (res.ok) setJobId(datos.job_id);
+      else { setEstadoTrabajo('error'); mostrarAviso('error', 'No se pudo iniciar la actualización.'); }
     } catch (error) {
       setEstadoTrabajo('error');
-      agregarLog(`[ERROR CRÍTICO] ${error.message}`);
+      mostrarAviso('error', 'No hay conexión con el servidor.');
     }
   };
 
-  // Función original de abortar
   const abortarScraping = async () => {
     if (!jobId) return;
-    agregarLog(`[SISTEMA] Solicitando abortar la extracción en curso...`);
     try {
-      const respuesta = await fetch(`http://localhost:8000/api/v1/admin/conocimiento/cancelar/${jobId}`, {
-        method: 'DELETE'
-      });
-      const datos = await respuesta.json();
-      if (!respuesta.ok) {
-        throw new Error(datos.detail || 'Fallo al cancelar el trabajo.');
-      }
+      await fetch(`${API}/cancelar/${jobId}`, { method: 'DELETE' });
       setEstadoTrabajo('cancelado');
-      agregarLog(`[SISTEMA] ${datos.mensaje}`);
     } catch (error) {
-      agregarLog(`[ERROR AL CANCELAR] ${error.message}`);
+      console.error(error);
     }
   };
 
-  // NUEVAS Funciones de Programación
+  const handleFechaInicioChange = (e) => {
+    const val = e.target.value;
+    setCronFechaInicio(val);
+    if (val && cronFrecuencia === 'semanal') {
+      const p = val.split('-');
+      const d = new Date(p[0], p[1] - 1, p[2]);
+      setCronDia(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][d.getDay()]);
+    }
+  };
+
   const guardarProgramacion = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await fetch('http://localhost:8000/api/v1/admin/conocimiento/programar', {
+      const res = await fetch(`${API}/programar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -176,283 +178,242 @@ const AdminConocimiento = () => {
           limite_paginas: modoInfinito ? 999999 : parseInt(limitePaginas, 10),
           frecuencia: cronFrecuencia,
           hora: cronHora,
-          dia_semana: cronDia
+          dia_semana: cronDia,
+          fecha_inicio: cronFechaInicio || null,
+          fecha_fin: cronFechaFin || null,
         }),
       });
-      if (respuesta.ok) {
-        alert("Programación guardada exitosamente.");
-        cargarProgramacionActual();
-      } else {
-        alert("Ocurrió un error al guardar la programación.");
-      }
+      if (res.ok) { mostrarAviso('ok', 'La actualización programada quedó activada.'); cargarProgramacionActual(); }
+      else mostrarAviso('error', 'No se pudo guardar la programación.');
     } catch (error) {
-      alert("Fallo de conexión al guardar la programación.");
+      mostrarAviso('error', 'No hay conexión con el servidor.');
     }
   };
 
   const cancelarProgramacion = async () => {
     try {
-      const respuesta = await fetch('http://localhost:8000/api/v1/admin/conocimiento/programar', { 
-        method: 'DELETE' 
-      });
-      if (respuesta.ok) {
-        setProgramacionActiva(null);
-        alert("Programación desactivada.");
-      }
+      const res = await fetch(`${API}/programar`, { method: 'DELETE' });
+      if (res.ok) { setProgramacionActiva(null); mostrarAviso('ok', 'La actualización programada se desactivó.'); }
     } catch (error) {
-      alert("Error de conexión al desactivar la programación.");
+      mostrarAviso('error', 'No hay conexión con el servidor.');
     }
   };
 
+  const abrirModalHistorial = () => { setModalAbierto(true); cargarHistorialArchivos(); };
+
+  // ---------------- Datos para el resumen ----------------
+  const enCurso = estadoTrabajo === 'procesando';
+  const estadoVisible = ESTADOS[estadoTrabajo] || ESTADOS.inactivo;
+  const ultima = historialArchivos.find((a) => (a.tipo || '').includes('Optimizado'));
+
   return (
     <div className="dashboard-root">
-      
+      <div className="estadisticas-container" style={{ padding: 0 }}>
+        <div className="gc-page">
 
-      <div className="estadisticas-container" style={{ display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: '100%', maxWidth: '1100px' }}>
-          <div className="grafico-header" style={{ marginBottom: '2rem' }}>
-            <h3>Gestión de Conocimiento Institucional</h3>
-            <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-              Módulo de extracción asíncrona local y optimización semántica RAG.
-            </p>
+          {/* ================= ENCABEZADO ================= */}
+          <div className="gc-header">
+            <div>
+              <h2>Gestión de Conocimiento</h2>
+              <p>Mantén al día la información con la que el asistente responde a los usuarios: actualiza el contenido del sitio web y agrega tus propios documentos.</p>
+            </div>
+            <button className="gc-btn gc-btn--secundario" onClick={abrirModalHistorial}>Historial de bases</button>
           </div>
 
-          {/* MANTENEMOS TU GRILLA ORIGINAL 1fr 2fr */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem' }}>
-            
-            {/* Columna Izquierda (Paneles de Control) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              
-              {/* PANEL 1: Extracción Manual (TU CÓDIGO INTACTO) */}
-              <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <h4 style={{ marginBottom: '1.5rem', color: '#1b4d3e', borderBottom: '1px solid #eee', paddingBottom: '0.5rem', fontSize: '1rem' }}>
-                  Parámetros de Extracción
-                </h4>
-                <form onSubmit={iniciarScraping}>
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.85rem', color: '#555' }}>URL Raíz</label>
-                    <input
-                      type="url"
-                      value={urlObjetivo}
-                      onChange={(e) => setUrlObjetivo(e.target.value)}
-                      required
-                      disabled={estadoTrabajo === 'procesando'}
-                      style={{ width: '100%', padding: '0.65rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
-                    />
-                  </div>
+          {aviso && (
+            <div className={`gc-aviso ${aviso.tipo === 'ok' ? 'gc-aviso--ok' : 'gc-aviso--error'}`}>
+              <span>{aviso.texto}</span>
+              <button onClick={() => setAviso(null)} aria-label="Cerrar">✕</button>
+            </div>
+          )}
 
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: '#555', marginBottom: '0.5rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={modoInfinito}
-                        onChange={(e) => setModoInfinito(e.target.checked)}
-                        disabled={estadoTrabajo === 'procesando'}
-                      />
-                      <strong>Extraer todo el sitio web (Hasta agotar enlaces)</strong>
-                    </label>
-                    
-                    {!modoInfinito && (
-                      <input
-                        type="number"
-                        min="1"
-                        max="5000"
-                        value={limitePaginas}
-                        onChange={(e) => setLimitePaginas(e.target.value)}
-                        required
-                        disabled={estadoTrabajo === 'procesando'}
-                        style={{ width: '100%', padding: '0.65rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
-                        placeholder="Límite de páginas"
-                      />
-                    )}
-                  </div>
+          {/* ================= RESUMEN ================= */}
+          <div className="gc-resumen">
+            <div className="gc-resumen-item">
+              <small>Estado de la actualización</small>
+              <strong><span className="gc-punto" style={{ background: estadoVisible.color }} />{estadoVisible.texto}</strong>
+            </div>
+            <div className="gc-resumen-item">
+              <small>Última actualización del sitio</small>
+              <strong>{ultima ? ultima.fecha : 'Aún no se ha realizado'}</strong>
+            </div>
+            <div className="gc-resumen-item">
+              <small>Próxima actualización automática</small>
+              <strong>{programacionActiva ? programacionActiva.siguiente_ejecucion : 'Sin programar'}</strong>
+            </div>
+          </div>
 
-                  <button
-                    type="submit"
-                    disabled={estadoTrabajo === 'procesando'}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      backgroundColor: estadoTrabajo === 'procesando' ? '#95a5a6' : '#1b4d3e',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontWeight: 'bold',
-                      cursor: estadoTrabajo === 'procesando' ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {estadoTrabajo === 'procesando' ? 'Procesando Extracción...' : 'Iniciar Extracción'}
-                  </button>
-                </form>
+          {/* ================= CUERPO ================= */}
+          <div className="gc-grid">
+            <div className="gc-col">
 
-                {estadoTrabajo === 'procesando' && (
-                  <button
-                    onClick={abortarScraping}
-                    style={{
-                      width: '100%',
-                      marginTop: '1rem',
-                      padding: '0.75rem',
-                      backgroundColor: '#e74c3c',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Detener Emergencia
-                  </button>
-                )}
-
-                <div style={{ marginTop: '2rem', padding: '1rem', background: '#f8f9fa', borderRadius: '4px', border: '1px solid #eee' }}>
-                  <h3 style={{ fontSize: '0.85rem', margin: 0, color: '#7f8c8d' }}>Estado del Sistema</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '0.75rem' }}>
-                    <div style={{ 
-                      width: '12px', 
-                      height: '12px', 
-                      borderRadius: '50%', 
-                      backgroundColor: estadoTrabajo === 'procesando' ? '#f57c00' : estadoTrabajo === 'completado' ? '#2e7d32' : estadoTrabajo === 'error' ? '#c62828' : estadoTrabajo === 'cancelado' ? '#ed6c02' : '#bdc3c7'
-                    }}></div>
-                    <span style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.85rem', color: '#333' }}>
-                      {estadoTrabajo}
-                    </span>
-                  </div>
+              {/* ---------- Actualización manual ---------- */}
+              <div className="gc-card">
+                <div className="gc-card-head">
+                  <h3>Actualizar ahora</h3>
+                  <p>Lee el sitio web y renueva la información del asistente.</p>
                 </div>
-
-                {estadoTrabajo === 'completado' && (
-                  <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {archivoCrudo && (
-                      <a 
-                        href={`http://localhost:8000/api/v1/admin/conocimiento/descargar/${archivoCrudo}`}
-                        download
-                        style={{
-                          display: 'block',
-                          textAlign: 'center',
-                          width: '100%',
-                          padding: '0.75rem',
-                          backgroundColor: '#6c757d',
-                          color: 'white',
-                          textDecoration: 'none',
-                          borderRadius: '4px',
-                          fontWeight: 'bold',
-                          boxSizing: 'border-box',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        ⬇ Descargar Base Original (.md)
-                      </a>
-                    )}
-                    {archivoOptimizado && (
-                      <a 
-                        href={`http://localhost:8000/api/v1/admin/conocimiento/descargar/${archivoOptimizado}`}
-                        download
-                        style={{
-                          display: 'block',
-                          textAlign: 'center',
-                          width: '100%',
-                          padding: '0.75rem',
-                          backgroundColor: '#2e7d32',
-                          color: 'white',
-                          textDecoration: 'none',
-                          borderRadius: '4px',
-                          fontWeight: 'bold',
-                          boxSizing: 'border-box',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        ⬇ Descargar Base Optimizada ML (.md)
-                      </a>
-                    )}
+                <form onSubmit={iniciarScraping}>
+                  <div className="gc-campo">
+                    <label htmlFor="gc-url">Dirección del sitio web</label>
+                    <input id="gc-url" type="url" value={urlObjetivo} onChange={(e) => setUrlObjetivo(e.target.value)} required disabled={enCurso} />
                   </div>
-                )}
+                  <div className="gc-campo">
+                    <label>Alcance</label>
+                    <div className="gc-segmentos">
+                      <button type="button" className={modoInfinito ? 'activo' : ''} onClick={() => setModoInfinito(true)} disabled={enCurso}>Todo el sitio</button>
+                      <button type="button" className={!modoInfinito ? 'activo' : ''} onClick={() => setModoInfinito(false)} disabled={enCurso}>Limitar páginas</button>
+                    </div>
+                  </div>
+                  {!modoInfinito && (
+                    <div className="gc-campo">
+                      <label htmlFor="gc-limite">Cantidad máxima de páginas</label>
+                      <input id="gc-limite" type="number" min="1" max="5000" value={limitePaginas} onChange={(e) => setLimitePaginas(e.target.value)} required disabled={enCurso} />
+                    </div>
+                  )}
+                  <button type="submit" className="gc-btn gc-btn--block" disabled={enCurso}>
+                    {enCurso ? 'Actualizando…' : 'Iniciar actualización'}
+                  </button>
+                  {enCurso && (
+                    <button type="button" className="gc-btn gc-btn--peligro gc-btn--block" style={{ marginTop: '0.6rem' }} onClick={abortarScraping}>
+                      Detener actualización
+                    </button>
+                  )}
+                </form>
+                <p className="gc-nota">Los documentos adicionales no se modifican durante la actualización.</p>
               </div>
 
-              {/* NUEVO PANEL 2: Programación CRON (Añadido debajo del control manual) */}
-              <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <h4 style={{ marginBottom: '1.2rem', color: '#0984e3', borderBottom: '1px solid #eee', paddingBottom: '0.5rem', fontSize: '1rem' }}>
-                  Automatización (CRON)
-                </h4>
-                
+              {/* ---------- Actualización programada ---------- */}
+              <div className="gc-card">
+                <div className="gc-card-head">
+                  <h3>Actualización programada</h3>
+                  <p>Renueva la información automáticamente, sin intervención.</p>
+                </div>
                 {programacionActiva ? (
-                  <div style={{ padding: '1rem', backgroundColor: '#e3f2fd', borderRadius: '6px', border: '1px solid #90caf9' }}>
-                    <h5 style={{ margin: '0 0 0.5rem 0', color: '#1565c0', fontSize: '0.9rem' }}>⏱️ Rutina Activa</h5>
-                    <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem 0' }}><strong>Próxima ejecución:</strong><br/>{programacionActiva.siguiente_ejecucion}</p>
-                    <p style={{ fontSize: '0.85rem', margin: '0 0 1rem 0' }}><strong>Regla:</strong> {programacionActiva.detalles}</p>
-                    <button 
-                      onClick={cancelarProgramacion} 
-                      style={{ width: '100%', padding: '0.6rem', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
-                    >
-                      Desactivar Tarea
-                    </button>
+                  <div className="gc-programacion">
+                    <strong>Programación activa</strong>
+                    <p>{programacionActiva.detalles}</p>
+                    <p>Próxima ejecución: {programacionActiva.siguiente_ejecucion}</p>
+                    <button className="gc-btn gc-btn--peligro gc-btn--block" onClick={cancelarProgramacion}>Desactivar programación</button>
                   </div>
                 ) : (
                   <form onSubmit={guardarProgramacion}>
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '0.3rem', fontWeight: 'bold' }}>Frecuencia</label>
-                      <select value={cronFrecuencia} onChange={(e) => setCronFrecuencia(e.target.value)} style={{ width: '100%', padding: '0.65rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
-                        <option value="diario">Diario</option>
-                        <option value="semanal">Semanal</option>
-                      </select>
+                    <div className="gc-fila">
+                      <div className="gc-campo">
+                        <label htmlFor="gc-frec">Frecuencia</label>
+                        <select id="gc-frec" value={cronFrecuencia} onChange={(e) => setCronFrecuencia(e.target.value)}>
+                          <option value="diario">Diaria</option>
+                          <option value="semanal">Semanal</option>
+                        </select>
+                      </div>
+                      <div className="gc-campo">
+                        <label htmlFor="gc-hora">Hora</label>
+                        <input id="gc-hora" type="time" value={cronHora} onChange={(e) => setCronHora(e.target.value)} required />
+                      </div>
                     </div>
                     {cronFrecuencia === 'semanal' && (
-                      <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '0.3rem', fontWeight: 'bold' }}>Día de la semana</label>
-                        <select value={cronDia} onChange={(e) => setCronDia(e.target.value)} style={{ width: '100%', padding: '0.65rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
-                          <option value="mon">Lunes</option>
-                          <option value="tue">Martes</option>
-                          <option value="wed">Miércoles</option>
-                          <option value="thu">Jueves</option>
-                          <option value="fri">Viernes</option>
-                          <option value="sat">Sábado</option>
+                      <div className="gc-campo">
+                        <label htmlFor="gc-dia">Día de la semana (según la fecha de inicio)</label>
+                        <select id="gc-dia" value={cronDia} onChange={(e) => setCronDia(e.target.value)} disabled>
+                          <option value="mon">Lunes</option><option value="tue">Martes</option><option value="wed">Miércoles</option>
+                          <option value="thu">Jueves</option><option value="fri">Viernes</option><option value="sat">Sábado</option>
                           <option value="sun">Domingo</option>
                         </select>
                       </div>
                     )}
-                    <div style={{ marginBottom: '1.5rem' }}>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '0.3rem', fontWeight: 'bold' }}>Hora de Ejecución</label>
-                      <input type="time" value={cronHora} onChange={(e) => setCronHora(e.target.value)} required style={{ width: '100%', padding: '0.65rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                    <div className="gc-fila">
+                      <div className="gc-campo">
+                        <label htmlFor="gc-ini">Desde (opcional)</label>
+                        <input id="gc-ini" type="date" value={cronFechaInicio} onChange={handleFechaInicioChange} />
+                      </div>
+                      <div className="gc-campo">
+                        <label htmlFor="gc-fin">Hasta (opcional)</label>
+                        <input id="gc-fin" type="date" value={cronFechaFin} onChange={(e) => setCronFechaFin(e.target.value)} />
+                      </div>
                     </div>
-                    <button type="submit" style={{ width: '100%', padding: '0.75rem', backgroundColor: '#0984e3', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>
-                      Guardar Programación
-                    </button>
+                    <button type="submit" className="gc-btn gc-btn--block">Activar programación</button>
+                    <p className="gc-nota">Usa la dirección y el alcance definidos en «Actualizar ahora».</p>
                   </form>
                 )}
               </div>
             </div>
 
-            {/* Columna Derecha (TU CONSOLA INTACTA) */}
-            <div style={{ display: 'flex', flexDirection: 'column', background: '#1e1e1e', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-              <div style={{ padding: '1rem 1.5rem', backgroundColor: '#2d2d2d', borderBottom: '1px solid #444' }}>
-                <h4 style={{ margin: 0, color: '#fff', fontSize: '0.9rem', fontWeight: '500', letterSpacing: '0.5px' }}>Terminal de Auditoría Semántica</h4>
+            {/* ---------- Registro de actividad ---------- */}
+            <div className="gc-registro">
+              <div className="gc-registro-head">
+                <h3>Registro de actividad</h3>
+                <p>Seguimiento en tiempo real de lo que hace el sistema durante la actualización.</p>
               </div>
-              
-              <div 
-                ref={consolaRef}
-                style={{ 
-                  flexGrow: 1, 
-                  color: '#4af626', 
-                  padding: '1.5rem', 
-                  fontFamily: '"Consolas", "Courier New", monospace', 
-                  fontSize: '0.85rem',
-                  overflowY: 'auto',
-                  minHeight: '400px',
-                  maxHeight: '750px' // Aumenté el max-height para que empate bien con la columna izquierda
-                }}
-              >
+              <div className="gc-registro-cuerpo" ref={consolaRef}>
                 {logs.length === 0 ? (
-                  <span style={{ color: '#888' }}>Esperando inicio de operación...</span>
+                  <span className="gc-registro-vacio">Sin actividad por ahora. Cuando inicies una actualización verás aquí su avance.</span>
                 ) : (
-                  logs.map((log, index) => (
-                    <div key={index} style={{ marginBottom: '0.5rem', lineHeight: '1.4' }}>
-                      {log}
-                    </div>
-                  ))
+                  logs.map((linea, i) => {
+                    const p = parsearLinea(linea);
+                    return (
+                      <div key={i} className={`gc-linea ${p.clase}`}>
+                        {p.hora && <span className="gc-hora">{p.hora}</span>}
+                        {p.etiqueta && <span className="gc-tag">{p.etiqueta}</span>}
+                        <span className="gc-texto">{p.texto}</span>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
-
           </div>
+
+          {/* ================= DOCUMENTOS ADICIONALES ================= */}
+          <PanelDocumentos onAviso={mostrarAviso} />
         </div>
+
+        {/* ================= HISTORIAL DE BASES (ventana) ================= */}
+        {modalAbierto && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h3>Historial de Bases de Conocimiento</h3>
+                <button className="modal-close-btn" onClick={() => setModalAbierto(false)}>✕</button>
+              </div>
+              <div className="modal-body">
+                {cargandoHistorial ? (
+                  <p style={{ textAlign: 'center', color: '#777', padding: '2rem' }}>Consultando almacenamiento del servidor...</p>
+                ) : historialArchivos.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#777', padding: '2rem' }}>Aún no se han generado archivos de conocimiento.</p>
+                ) : (
+                  <table className="tabla-historial-archivos">
+                    <thead>
+                      <tr>
+                        <th>Fecha de Generación</th>
+                        <th>Nombre del Archivo</th>
+                        <th>Clasificación</th>
+                        <th>Tamaño</th>
+                        <th style={{ textAlign: 'center' }}>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historialArchivos.map((arch, index) => (
+                        <tr key={index}>
+                          <td>{arch.fecha}</td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#1b4d3e' }}>{arch.nombre}</td>
+                          <td>
+                            <span className={`etiqueta-tipo-archivo ${arch.tipo.includes('Optimizado') ? 'tipo-optimizado' : 'tipo-crudo'}`}>
+                              {arch.tipo}
+                            </span>
+                          </td>
+                          <td>{arch.peso_kb} KB</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <a href={`${API}/descargar/${arch.nombre}`} download className="btn-descarga-mini">Descargar</a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

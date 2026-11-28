@@ -1,7 +1,7 @@
 // ==============================================================================
-// Dashboard Administrativo - Bandeja PQR (Asesores Humanos en Vivo)
+// Dashboard Administrativo - Centro de Atención (Asesores Humanos en Vivo)
 // ==============================================================================
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import '../Dashboard.css';
 
@@ -11,7 +11,7 @@ const WS_BASE_URL = "ws://localhost:8000/api/v1/chat";
 const AdminBandejaPQR = () => {
   const [sesionesPendientes, setSesionesPendientes] = useState([]);
   
-  // Recuperar sesión activa del almacenamiento local si existe
+  // Persistencia de la sesión activa al cambiar de pestaña
   const [sesionActiva, setSesionActiva] = useState(() => {
     return localStorage.getItem('sesionPQRActiva') || null;
   });
@@ -25,18 +25,6 @@ const AdminBandejaPQR = () => {
   const wsRef = useRef(null);
   const mensajesEndRef = useRef(null);
 
-  useEffect(() => {
-    mensajesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensajes]);
-
-  // Si hay una sesión activa guardada, la cargamos al montar el componente
-  useEffect(() => {
-    if (sesionActiva) {
-      seleccionarSesion(sesionActiva);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const cargarSesionesPendientes = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/sesiones/pendientes`);
@@ -46,18 +34,21 @@ const AdminBandejaPQR = () => {
     }
   };
 
-  useEffect(() => {
-    cargarSesionesPendientes();
-    const intervalo = setInterval(cargarSesionesPendientes, 10000);
-    return () => clearInterval(intervalo);
+  const conectarWebSocket = useCallback((sesionId) => {
+    const ws = new WebSocket(`${WS_BASE_URL}/ws/${sesionId}/asesor`);
+    ws.onmessage = (evento) => {
+      const data = JSON.parse(evento.data);
+      if (data.tipo === "nuevo_mensaje" || data.tipo === "alerta_sistema") {
+        setMensajes(prev => [...prev, { emisor: data.emisor, contenido: data.contenido }]);
+      }
+    };
+    wsRef.current = ws;
   }, []);
 
-  const seleccionarSesion = async (sesionId) => {
+  const seleccionarSesion = useCallback(async (sesionId) => {
     if (wsRef.current) wsRef.current.close();
-    
     setSesionActiva(sesionId);
-    localStorage.setItem('sesionPQRActiva', sesionId); // Guardar estado
-    
+    localStorage.setItem('sesionPQRActiva', sesionId);
     setMensajes([]);
     setTipologia(""); 
     setNotaInterna(""); 
@@ -68,32 +59,29 @@ const AdminBandejaPQR = () => {
       conectarWebSocket(sesionId);
     } catch (error) {
       console.error("Error cargando historial:", error);
-      // Si la sesión ya no existe (fue cerrada desde otra pestaña), limpiar estado
       if (error.response && error.response.status === 404) {
-        limpiarSesionLocal();
+        setSesionActiva(null);
+        localStorage.removeItem('sesionPQRActiva');
+        setMensajes([]);
       }
     }
-  };
+  }, [conectarWebSocket]);
 
-  const limpiarSesionLocal = () => {
-    setSesionActiva(null);
-    localStorage.removeItem('sesionPQRActiva');
-    setMensajes([]);
-    setTipologia("");
-    setNotaInterna("");
-    if (wsRef.current) wsRef.current.close();
-  };
+  useEffect(() => {
+    cargarSesionesPendientes();
+    const intervalo = setInterval(cargarSesionesPendientes, 10000);
+    return () => clearInterval(intervalo);
+  }, []);
 
-  const conectarWebSocket = (sesionId) => {
-    const ws = new WebSocket(`${WS_BASE_URL}/ws/${sesionId}/asesor`);
-    ws.onmessage = (evento) => {
-      const data = JSON.parse(evento.data);
-      if (data.tipo === "nuevo_mensaje" || data.tipo === "alerta_sistema") {
-        setMensajes(prev => [...prev, { emisor: data.emisor, contenido: data.contenido }]);
-      }
-    };
-    wsRef.current = ws;
-  };
+  useEffect(() => {
+    if (sesionActiva) {
+      seleccionarSesion(sesionActiva);
+    }
+  }, [sesionActiva, seleccionarSesion]);
+
+  useEffect(() => {
+    mensajesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [mensajes]);
 
   const enviarMensaje = () => {
     if (!textoInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -113,7 +101,12 @@ const AdminBandejaPQR = () => {
         tipologia: tipologia,
         nota_interna: notaInterna
       });
-      limpiarSesionLocal();
+      if (wsRef.current) wsRef.current.close();
+      setSesionActiva(null);
+      localStorage.removeItem('sesionPQRActiva');
+      setMensajes([]);
+      setTipologia("");
+      setNotaInterna("");
       cargarSesionesPendientes();
       alert("PQR cerrada con éxito.");
     } catch (error) {
@@ -121,7 +114,6 @@ const AdminBandejaPQR = () => {
     }
   };
 
-  // Buscamos los datos del usuario que está en la sesión actual
   const sesionData = sesionesPendientes.find(s => s.sesion_id === sesionActiva);
 
   return (
@@ -129,7 +121,7 @@ const AdminBandejaPQR = () => {
       {/* Columna Izquierda: Cola de Tickets */}
       <div className="sidebar-conversaciones">
         <div className="sidebar-header">
-          Tickets Pendientes ({sesionesPendientes.length})
+          Centro de Atención ({sesionesPendientes.length})
         </div>
         <div style={{ overflowY: 'auto', flex: 1 }}>
           {sesionesPendientes.length === 0 ? (
@@ -148,7 +140,7 @@ const AdminBandejaPQR = () => {
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#666' }}>{sesion.sede} - {sesion.tipo_usuario}</div>
                 <div style={{ fontSize: '0.75rem', color: '#d32f2f', marginTop: '2px', fontWeight: '500' }}>
-                  {sesion.estado === 'en_cola' ? 'En Cola' : 'Atención Humana'}
+                  Atención Humana
                 </div>
               </div>
             ))
@@ -199,23 +191,17 @@ const AdminBandejaPQR = () => {
           </p>
         ) : (
           <>
-            {/* --- BLOQUE 1: TRAZABILIDAD (Restaurado) --- */}
+            {/* BLOQUE 1: TRAZABILIDAD */}
             <div className="meta-grupo">
               <label>ID de Sesión</label>
               <span style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>{sesionActiva}</span>
             </div>
             <div className="meta-grupo">
-              <label>Canal de Origen</label>
-              <span>Widget Web Institucional</span>
-            </div>
-            <div className="meta-grupo">
               <label>Estado Actual</label>
-              <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>
-                {sesionData?.estado === 'en_cola' ? 'En Cola' : 'En Atención Humana'}
-              </span>
+              <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>En Cola de Intervención</span>
             </div>
 
-            {/* --- BLOQUE 2: DETALLES DEL USUARIO CAPTURADOS --- */}
+            {/* BLOQUE 2: DETALLES DEL USUARIO CAPTURADOS */}
             <div style={{ margin: '1.5rem 0', borderTop: '1px solid #e0e0e0', paddingTop: '1rem' }}>
               <h4 style={{ fontSize: '0.9rem', marginBottom: '10px', color: '#444' }}>Perfil del Usuario</h4>
               <div className="meta-grupo">
@@ -237,17 +223,17 @@ const AdminBandejaPQR = () => {
               </div>
             </div>
 
-            {/* --- BLOQUE 3: GESTIÓN ADMINISTRATIVA (Restaurado) --- */}
+            {/* BLOQUE 3: GESTIÓN ADMINISTRATIVA */}
             <div style={{ margin: '1.5rem 0', borderTop: '1px solid #e0e0e0', paddingTop: '1rem' }}>
-              <h4 style={{ fontSize: '0.9rem', marginBottom: '10px', color: '#444' }}>Gestión Administrativa</h4>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: '10px', color: '#444' }}>Resolución Operativa</h4>
               <div className="meta-grupo">
                 <label>Tipología Institucional</label>
                 <select 
                   value={tipologia} 
                   onChange={(e) => setTipologia(e.target.value)}
-                  style={{ width: '100%', padding: '6px', marginTop: '4px', borderRadius: '4px', border: '1px solid #ccc' }}
+                  style={{ width: '100%', padding: '8px', marginTop: '4px', borderRadius: '4px', border: '1px solid #ccc', outline: 'none' }}
                 >
-                  <option value="">Seleccione una clasificación...</option>
+                  <option value="">Clasificación del caso...</option>
                   <option value="peticion">Petición</option>
                   <option value="queja">Queja</option>
                   <option value="reclamo">Reclamo</option>
@@ -261,13 +247,13 @@ const AdminBandejaPQR = () => {
                   value={notaInterna}
                   onChange={(e) => setNotaInterna(e.target.value)}
                   rows="4"
-                  placeholder="Registra detalles de la solución o escalamiento..."
-                  style={{ width: '100%', padding: '6px', marginTop: '4px', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
+                  placeholder="Detalles de la solución o escalamiento..."
+                  style={{ width: '100%', padding: '8px', marginTop: '4px', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical', outline: 'none' }}
                 />
               </div>
             </div>
 
-            {/* --- BLOQUE 4: ACCIONES DEL TICKET (Restaurado) --- */}
+            {/* BLOQUE 4: ACCIONES DEL TICKET */}
             <div className="acciones-ticket">
               <button className="btn-accion btn-reasignar">Reasignar a otra Cola</button>
               <button className="btn-accion btn-resolver" onClick={cerrarSesionPQR}>

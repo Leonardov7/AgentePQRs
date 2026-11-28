@@ -24,7 +24,7 @@ async def consultar_agente_dify(pregunta: str, identificador_usuario: str) -> di
     """
     if not DIFY_KEY or "AQUI_PEGA" in DIFY_KEY:
         logger.error("DIFY_API_KEY no es válida o sigue siendo la de prueba.")
-        return {"estado": "error"}
+        return {"estado": "error", "respuesta": "Error interno de configuración (API Key)."}
 
     headers = {
         "Authorization": f"Bearer {DIFY_KEY}",
@@ -74,7 +74,6 @@ async def consultar_agente_dify(pregunta: str, identificador_usuario: str) -> di
             metadata = data.get("metadata", {})
             retriever_resources = metadata.get("retriever_resources", [])
             
-            # AUDITORÍA ESTRICTA DE METADATOS DE DIFY
             logger.warning(f">>> [AUDITORÍA METADATA DIFY] Recursos recuperados ({len(retriever_resources)}): {json.dumps(retriever_resources, ensure_ascii=False)}")
             
             # Si Dify no envía documentos, la similitud es estrictamente cero.
@@ -100,7 +99,7 @@ async def consultar_agente_dify(pregunta: str, identificador_usuario: str) -> di
 
     except httpx.HTTPStatusError as e:
         logger.error(f"Dify respondió con error HTTP: {e.response.status_code} - {e.response.text}")
-        return {"estado": "error"}
+        return {"estado": "error", "respuesta": "El servidor de inteligencia artificial está temporalmente fuera de servicio."}
     except Exception as e:
         logger.error(f"Fallo de conexión o timeout con la API de Dify: {str(e)}")
-        return {"estado": "error"}
+        return {"estado": "error", "respuesta": "Tiempo de espera agotado al conectar con el motor cognitivo."}

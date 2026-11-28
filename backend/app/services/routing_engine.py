@@ -58,23 +58,27 @@ def intencion_solicitar_humano(texto_usuario: str) -> bool:
     return False
 
 async def evaluar_y_enrutar_respuesta(db: AsyncSession, sesion_id: UUID, respuesta_dify: dict = None, peticion_usuario: str = None) -> dict:
-    """
-    Recibe el payload de Dify, evalúa el puntaje de similitud RAG, 
-    interactúa con las etiquetas del LLM y altera el estado de la sesión.
-    """
     
     # 0. BYPASS POR INTENCIÓN EXPLÍCITA DEL USUARIO
-    if peticion_usuario and intencion_solicitar_humano(peticion_usuario):
-        logger.warning(f">>> [INTENCIÓN DETECTADA] El usuario solicitó atención humana explícita.")
-        return {
-            "accion": "ofrecer_escalamiento",
-            "estado_actual": "atencion_bot",
-            "mensaje_publico": "¿Quieres que te comunique con un asesor institucional?",
-            "opciones": [
-                {"label": "👤 Sí, hablar con un asesor", "value": "/escalar_humano"},
-                {"label": "🔄 No, continuar con el bot", "value": "/continuar"}
-            ]
-        }
+    if peticion_usuario:
+        if intencion_solicitar_humano(peticion_usuario):
+            logger.warning(f">>> [INTENCIÓN DETECTADA] El usuario solicitó atención humana explícita.")
+            return {
+                "accion": "ofrecer_escalamiento",
+                "estado_actual": "atencion_bot",
+                "mensaje_publico": "¿Quieres que te comunique con un asesor institucional?",
+                "opciones": [
+                    {"label": "👤 Sí, hablar con un asesor", "value": "/escalar_humano"},
+                    {"label": "🔄 No, continuar con el bot", "value": "/continuar"}
+                ]
+            }
+        # Si no hay intención manual y la respuesta de dify es nula, salimos para que chat.py llame a Dify
+        if respuesta_dify is None:
+            return None
+
+    # 1. PROTECCIÓN CONTRA PAYLOADS NULOS O FALLOS DE RED
+    if not respuesta_dify or type(respuesta_dify) is not dict:
+        respuesta_dify = {"estado": "error", "respuesta": "Error de comunicación nula con el LLM."}
 
     # Procesamiento normal de la respuesta de Dify
     logger.warning(">>> [DEBUG DIFY PAYLOAD] Paquete crudo recibido de la API:")
@@ -91,16 +95,16 @@ async def evaluar_y_enrutar_respuesta(db: AsyncSession, sesion_id: UUID, respues
     
     etiqueta_visual = f"*[DISTANCIA VECTORIAL: {str_similitud} | CONFIANZA: {confianza_humana}% | UMBRAL: {umbral_actual}%]*\n\n"
 
-    # 1. Fallo catastrófico de red o API
+    # 2. Fallo catastrófico reportado internamente por Dify (Timeout o Error 500)
     if estado_dify == "error":
-        logger.error(f">>> [FALLO COGNITIVO] Error de conexión con Dify. Escalando sesión {sesion_id}.")
+        logger.error(f">>> [FALLO COGNITIVO] Error interno de Dify. Escalando sesión {sesion_id}.")
         await _escalar_a_humano(db, sesion_id)
         return {
             "accion": "escalado",
             "mensaje_publico": etiqueta_visual + "He tenido un problema técnico procesando tu solicitud. Te transferiré con un asesor humano para asistencia inmediata."
         }
 
-    # 2. EVALUACIÓN DE BANDERA DETERMINISTA (BYPASS DE CORTESÍA)
+    # 3. EVALUACIÓN DE BANDERA DETERMINISTA (BYPASS DE CORTESÍA)
     es_cortesia = False
     if "[CORTESÍA]" in texto_respuesta:
         es_cortesia = True
@@ -109,7 +113,7 @@ async def evaluar_y_enrutar_respuesta(db: AsyncSession, sesion_id: UUID, respues
 
     texto_limpio_bd = texto_respuesta
 
-    # 3. EVALUACIÓN DE ALUCINACIÓN EXPRESA (EL LLM ADMITE IGNORANCIA)
+    # 4. EVALUACIÓN DE ALUCINACIÓN EXPRESA (EL LLM ADMITE IGNORANCIA)
     if "no poseo información institucional verificada" in texto_respuesta:
         logger.warning(">>> [PAUSA] El LLM no tiene la información. Ofreciendo opciones al usuario.")
         
@@ -133,7 +137,7 @@ async def evaluar_y_enrutar_respuesta(db: AsyncSession, sesion_id: UUID, respues
             ]
         }
     
-    # 4. EVALUACIÓN ALGORÍTMICA DE CONFIANZA (Solo aplica si NO es cortesía)
+    # 5. EVALUACIÓN ALGORÍTMICA DE CONFIANZA (Solo aplica si NO es cortesía)
     if not es_cortesia and (similitud is None or confianza_humana < umbral_actual):
         logger.warning(f">>> [DESVÍO] Similitud ({similitud}) inferior al umbral ({umbral_actual}%). Ofreciendo opciones.")
         
@@ -158,7 +162,7 @@ async def evaluar_y_enrutar_respuesta(db: AsyncSession, sesion_id: UUID, respues
             ]
         }
 
-    # 5. RESPUESTA APROBADA (Supera el umbral RAG o es una cortesía flaggeada)
+    # 6. RESPUESTA APROBADA (Supera el umbral RAG o es una cortesía flaggeada)
     if es_cortesia:
         logger.warning(">>> [APROBADO] Entregando saludo de cortesía al usuario.")
     else:

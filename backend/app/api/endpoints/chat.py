@@ -203,31 +203,40 @@ async def websocket_chat_humano(websocket: WebSocket, sesion_id: str, rol: str):
                               await manager.send_personal_message(respuesta_final, websocket)
                               continue
 
-                         # Evaluar intención MANUAL del usuario antes de ir a Dify
+                         # 1. Intentamos bypass de intención manual
                          resultado_enrutamiento = await evaluar_y_enrutar_respuesta(
                              db=db, 
                              sesion_id=sesion.id, 
                              peticion_usuario=texto_mensaje
                          )
                          
-                         # Si no hubo bypass por intención manual, consultamos a Dify
-                         if resultado_enrutamiento is None or "accion" not in resultado_enrutamiento:
+                         # 2. Si no hay Bypass manual, se dispara Dify
+                         if not resultado_enrutamiento or "accion" not in resultado_enrutamiento:
                              logger.info(f"Enviando consulta a Dify Cloud para sesión: {sesion.id}")
                              respuesta_bruta_dify = await consultar_agente_dify(
                                  pregunta=texto_mensaje,
                                  identificador_usuario=str(sesion.id)
                              )
 
+                             # Y volvemos a enrutar con el resultado crudo de Dify
                              resultado_enrutamiento = await evaluar_y_enrutar_respuesta(
                                  db=db, 
                                  sesion_id=sesion.id, 
                                  respuesta_dify=respuesta_bruta_dify
                              )
 
+                         # PROTECCIÓN EXTRA: Si el motor devuelve None, forzamos un fallback seguro
+                         if not resultado_enrutamiento:
+                             resultado_enrutamiento = {
+                                 "accion": "escalado",
+                                 "mensaje_publico": "Error interno al procesar. Te he transferido con un asesor humano."
+                             }
+
+                         # 3. Empaquetar y enviar por socket
                          respuesta_final = {
                              "tipo": "nuevo_mensaje",
                              "emisor": "bot" if resultado_enrutamiento.get("accion") != "escalado" else "sistema",
-                             "contenido": resultado_enrutamiento["mensaje_publico"],
+                             "contenido": resultado_enrutamiento.get("mensaje_publico", "Error procesando tu petición."),
                          }
                          
                          if "opciones" in resultado_enrutamiento:
